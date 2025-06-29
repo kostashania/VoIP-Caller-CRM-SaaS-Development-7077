@@ -26,11 +26,17 @@ function App() {
         <Toaster 
           position="top-right"
           toastOptions={{
-            duration: 4000,
+            duration: 2000, // Shorter duration - 2 seconds instead of 4
             style: {
               background: '#363636',
               color: '#fff',
             },
+            success: {
+              duration: 1500, // Even shorter for success messages
+            },
+            error: {
+              duration: 3000, // Longer for errors so users can read them
+            }
           }}
         />
 

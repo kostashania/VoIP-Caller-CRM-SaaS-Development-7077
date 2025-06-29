@@ -18,6 +18,7 @@ function SipSettings() {
   const [isTesting, setIsTesting] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
   const { getUserCompanyId, hasRole } = useAuthStore();
   
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm({
@@ -29,11 +30,11 @@ function SipSettings() {
 
   useEffect(() => {
     loadSipSettings();
+    // Check monitoring status
+    setIsMonitoring(sipService.getMonitoringStatus());
   }, []);
 
   const loadSipSettings = async () => {
-    if (!hasRole('admin')) return;
-    
     try {
       setIsLoading(true);
       const companyId = getUserCompanyId();
@@ -60,6 +61,7 @@ function SipSettings() {
       }
     } catch (error) {
       console.error('Failed to load SIP settings:', error);
+      toast.error('Failed to load SIP settings');
     } finally {
       setIsLoading(false);
     }
@@ -67,6 +69,7 @@ function SipSettings() {
 
   const onSubmit = async (data) => {
     try {
+      setIsSaving(true);
       const companyId = getUserCompanyId();
       if (!companyId) {
         throw new Error('No company ID found');
@@ -82,18 +85,28 @@ function SipSettings() {
       };
 
       // Only include password if provided
-      if (data.password) {
+      if (data.password && data.password.trim()) {
         configData.password = data.password;
       }
 
+      console.log('Saving SIP config:', configData);
       await sipAPI.updateConfig(companyId, configData);
-      toast.success('SIP settings saved successfully');
+      
+      toast.success('SIP settings saved successfully', {
+        duration: 2000
+      });
       
       // Reinitialize SIP service with new settings
       await sipService.initialize(companyId);
+      
+      // Clear password field after successful save
+      setValue('password', '');
+      
     } catch (error) {
       console.error('Failed to save SIP settings:', error);
       toast.error(error.message || 'Failed to save SIP settings');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -107,13 +120,18 @@ function SipSettings() {
       setIsTesting(true);
       const formData = watch();
       
+      // First save the settings if they've changed
+      if (formData.username && formData.domain) {
+        await onSubmit(formData);
+      }
+      
       const result = await sipAPI.testConnection(companyId, formData);
       setConnectionStatus(result);
       
       if (result.success) {
-        toast.success('SIP connection test successful');
+        toast.success('SIP connection test successful', { duration: 2000 });
       } else {
-        toast.error('SIP connection test failed');
+        toast.error('SIP connection test failed', { duration: 3000 });
       }
     } catch (error) {
       console.error('SIP connection test failed:', error);
@@ -138,14 +156,22 @@ function SipSettings() {
       if (isMonitoring) {
         sipService.stopMonitoring();
         setIsMonitoring(false);
-        toast.success('SIP monitoring stopped');
+        toast.success('SIP monitoring stopped', { duration: 2000 });
       } else {
+        // Make sure settings are saved first
+        const formData = watch();
+        if (formData.username && formData.domain) {
+          await onSubmit(formData);
+        }
+        
         await sipService.initialize(companyId);
         const success = await sipService.startMonitoring();
         
         if (success) {
           setIsMonitoring(true);
-          toast.success('SIP monitoring started');
+          toast.success('SIP monitoring started - incoming calls will appear as popups', { 
+            duration: 3000 
+          });
         } else {
           toast.error('Failed to start SIP monitoring');
         }
@@ -155,20 +181,6 @@ function SipSettings() {
       toast.error(error.message || 'Failed to toggle SIP monitoring');
     }
   };
-
-  if (!hasRole('admin')) {
-    return (
-      <div className="bg-white shadow rounded-lg p-6">
-        <div className="text-center">
-          <SafeIcon icon={FiShield} className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Access Restricted</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Only administrators can configure SIP settings.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -182,7 +194,7 @@ function SipSettings() {
               </p>
             </div>
             
-            {/* Monitoring Status */}
+            {/* Monitoring Status - Available to all users */}
             <div className="flex items-center space-x-3">
               <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
                 isMonitoring 
@@ -192,7 +204,7 @@ function SipSettings() {
                 <div className={`w-2 h-2 rounded-full ${
                   isMonitoring ? 'bg-green-500' : 'bg-gray-400'
                 }`}></div>
-                <span>{isMonitoring ? 'Monitoring' : 'Stopped'}</span>
+                <span>{isMonitoring ? 'Monitoring Active' : 'Monitoring Stopped'}</span>
               </div>
               
               <button
@@ -208,6 +220,20 @@ function SipSettings() {
               </button>
             </div>
           </div>
+
+          {!hasRole('admin') && (
+            <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex">
+                <SafeIcon icon={FiShield} className="h-5 w-5 text-yellow-400" />
+                <div className="ml-3">
+                  <p className="text-sm text-yellow-700">
+                    <strong>Note:</strong> Only administrators can modify SIP settings. 
+                    You can start/stop monitoring but cannot change the configuration.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -226,9 +252,10 @@ function SipSettings() {
                       <SafeIcon icon={FiPhone} className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
-                      {...register('username', { required: 'SIP Username is required' })}
+                      {...register('username', { required: hasRole('admin') ? 'SIP Username is required' : false })}
                       type="text"
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      disabled={!hasRole('admin')}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
                       placeholder="your_sip_username"
                     />
                   </div>
@@ -247,9 +274,10 @@ function SipSettings() {
                       <SafeIcon icon={FiGlobe} className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
-                      {...register('domain', { required: 'SIP Domain is required' })}
+                      {...register('domain', { required: hasRole('admin') ? 'SIP Domain is required' : false })}
                       type="text"
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      disabled={!hasRole('admin')}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
                       placeholder="sip.modulus.gr"
                     />
                   </div>
@@ -270,13 +298,11 @@ function SipSettings() {
                     <input
                       {...register('password')}
                       type="password"
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Leave blank to keep current password"
+                      disabled={!hasRole('admin')}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
+                      placeholder={hasRole('admin') ? "Leave blank to keep current password" : "Hidden"}
                     />
                   </div>
-                  {errors.password && (
-                    <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-                  )}
                 </div>
 
                 {/* SIP Proxy */}
@@ -291,7 +317,8 @@ function SipSettings() {
                     <input
                       {...register('proxy')}
                       type="text"
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      disabled={!hasRole('admin')}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
                       placeholder="proxy.modulus.gr"
                     />
                   </div>
@@ -304,7 +331,8 @@ function SipSettings() {
                   </label>
                   <select
                     {...register('transport')}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    disabled={!hasRole('admin')}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
                   >
                     <option value="UDP">UDP</option>
                     <option value="TCP">TCP</option>
@@ -319,12 +347,13 @@ function SipSettings() {
                   </label>
                   <input
                     {...register('port', { 
-                      required: 'Port is required',
+                      required: hasRole('admin') ? 'Port is required' : false,
                       min: { value: 1024, message: 'Port must be >= 1024' },
                       max: { value: 65535, message: 'Port must be <= 65535' }
                     })}
                     type="number"
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    disabled={!hasRole('admin')}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
                     placeholder="5060"
                   />
                   {errors.port && (
@@ -383,25 +412,28 @@ function SipSettings() {
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex space-x-3">
-                <button
-                  type="button"
-                  onClick={testConnection}
-                  disabled={isTesting}
-                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  <SafeIcon icon={FiSettings} className="w-4 h-4" />
-                  <span>{isTesting ? 'Testing...' : 'Test Connection'}</span>
-                </button>
-                
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700"
-                >
-                  Save SIP Settings
-                </button>
-              </div>
+              {/* Actions - Only show to admins */}
+              {hasRole('admin') && (
+                <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={testConnection}
+                    disabled={isTesting}
+                    className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <SafeIcon icon={FiSettings} className="w-4 h-4" />
+                    <span>{isTesting ? 'Testing...' : 'Test Connection'}</span>
+                  </button>
+                  
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {isSaving ? 'Saving...' : 'Save SIP Settings'}
+                  </button>
+                </div>
+              )}
             </form>
           )}
         </div>
@@ -426,6 +458,24 @@ function SipSettings() {
                 <li>All call activity is tracked for reporting and analytics</li>
               </ul>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Demo Notice */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <SafeIcon icon={FiSettings} className="h-5 w-5 text-yellow-400" />
+          </div>
+          <div className="ml-3">
+            <h4 className="text-sm font-medium text-yellow-900">
+              Demo Mode Active
+            </h4>
+            <p className="mt-1 text-sm text-yellow-700">
+              This is a demonstration of SIP integration. In production, this would connect to real SIP providers.
+              Click "Start Monitoring" to begin receiving simulated incoming calls.
+            </p>
           </div>
         </div>
       </div>

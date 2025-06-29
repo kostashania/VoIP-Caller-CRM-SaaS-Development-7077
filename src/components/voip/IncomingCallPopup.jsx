@@ -40,12 +40,12 @@ function IncomingCallPopup() {
   }, [isCallActive, callStartTime]);
 
   useEffect(() => {
-    // Auto-clear incoming call after 30 seconds if not answered
+    // Auto-clear incoming call after 25 seconds if not answered
     const timer = setTimeout(() => {
       if (incomingCall && !isCallActive) {
         handleMissed();
       }
-    }, 30000);
+    }, 25000);
 
     return () => clearTimeout(timer);
   }, [incomingCall, isCallActive]);
@@ -63,7 +63,7 @@ function IncomingCallPopup() {
       const updatedCall = await callLogsAPI.updateStatus(incomingCall.id, 'answered');
       updateCallLog(updatedCall);
       
-      toast.success('Call answered');
+      toast.success('Call answered', { duration: 1500 });
     } catch (error) {
       console.error('Failed to answer call:', error);
       toast.error('Failed to answer call');
@@ -91,7 +91,7 @@ function IncomingCallPopup() {
       setIsCallActive(false);
       clearIncomingCall();
       
-      toast.success(`Call completed (${formatDuration(callDuration)})`);
+      toast.success(`Call completed (${formatDuration(callDuration)})`, { duration: 2000 });
     } catch (error) {
       console.error('Failed to end call:', error);
       toast.error('Failed to end call');
@@ -108,7 +108,7 @@ function IncomingCallPopup() {
       updateCallLog(updatedCall);
       
       clearIncomingCall();
-      toast.info('Call missed');
+      toast.info('Call missed', { duration: 1500 });
     } catch (error) {
       console.error('Failed to mark call as missed:', error);
     }
@@ -128,10 +128,10 @@ function IncomingCallPopup() {
       updateCallLog(updatedCall);
       
       setShowCreateCaller(false);
-      toast.success('Caller created successfully');
+      toast.success('Customer created successfully', { duration: 2000 });
     } catch (error) {
       console.error('Failed to create caller:', error);
-      toast.error('Failed to create caller');
+      toast.error('Failed to create customer');
     }
   };
 
@@ -141,6 +141,7 @@ function IncomingCallPopup() {
     if (incomingCall.id) {
       try {
         await callLogsAPI.setSelectedAddress(incomingCall.id, addressId);
+        toast.success('Address selected', { duration: 1500 });
       } catch (error) {
         console.error('Failed to set selected address:', error);
       }
@@ -164,7 +165,7 @@ function IncomingCallPopup() {
       setShowAddAddress(false);
       setSelectedAddressId(newAddress.id);
       
-      toast.success('Address added successfully');
+      toast.success('Address added successfully', { duration: 2000 });
     } catch (error) {
       console.error('Failed to add address:', error);
       toast.error('Failed to add address');
@@ -183,7 +184,7 @@ function IncomingCallPopup() {
     if (incomingCall.id) {
       try {
         await callLogsAPI.updateDeliveryStatus(incomingCall.id, status);
-        toast.success(`Delivery status updated: ${status}`);
+        toast.success(`Delivery status: ${status}`, { duration: 1500 });
       } catch (error) {
         console.error('Failed to update delivery status:', error);
       }
@@ -216,10 +217,10 @@ function IncomingCallPopup() {
               className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4"
             >
               {/* Header */}
-              <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-t-2xl p-6 text-white">
+              <div className={`${isCallActive ? 'bg-gradient-to-r from-green-600 to-green-700' : 'bg-gradient-to-r from-primary-600 to-primary-700'} rounded-t-2xl p-6 text-white`}>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold">
-                    {isCallActive ? 'Active Call' : 'Incoming Call'}
+                    {isCallActive ? '📞 Active Call' : '📱 Incoming Call'}
                   </h3>
                   <div className="flex items-center space-x-2">
                     {isCallActive && (
@@ -259,7 +260,7 @@ function IncomingCallPopup() {
               </div>
 
               {/* Content */}
-              <div className="p-6">
+              <div className="p-6 max-h-96 overflow-y-auto">
                 {/* Caller Details */}
                 {caller ? (
                   <div className="space-y-4">
@@ -267,7 +268,7 @@ function IncomingCallPopup() {
                     {caller.global_note && (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                         <p className="text-sm text-blue-800 italic">
-                          "{caller.global_note}"
+                          "📝 {caller.global_note}"
                         </p>
                       </div>
                     )}
@@ -276,7 +277,7 @@ function IncomingCallPopup() {
                     {addresses.length > 0 ? (
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <h5 className="font-medium text-gray-900">Select Address</h5>
+                          <h5 className="font-medium text-gray-900">📍 Select Delivery Address</h5>
                           <button
                             onClick={() => setShowAddAddress(true)}
                             className="text-primary-600 hover:text-primary-500"
@@ -284,7 +285,7 @@ function IncomingCallPopup() {
                             <SafeIcon icon={FiPlus} className="w-4 h-4" />
                           </button>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
                           {addresses.map((address) => (
                             <button
                               key={address.id}
@@ -301,9 +302,12 @@ function IncomingCallPopup() {
                                   <p className="font-medium text-gray-900">{address.label}</p>
                                   <p className="text-sm text-gray-600">{address.address}</p>
                                   {address.comment && (
-                                    <p className="text-xs text-gray-500 mt-1">{address.comment}</p>
+                                    <p className="text-xs text-gray-500 mt-1">💬 {address.comment}</p>
                                   )}
                                 </div>
+                                {selectedAddressId === address.id && (
+                                  <SafeIcon icon={FiCheckCircle} className="w-5 h-5 text-primary-600" />
+                                )}
                               </div>
                             </button>
                           ))}
@@ -317,7 +321,7 @@ function IncomingCallPopup() {
                           onClick={() => setShowAddAddress(true)}
                           className="mt-2 text-primary-600 hover:text-primary-500 text-sm"
                         >
-                          Add Address
+                          ➕ Add Address
                         </button>
                       </div>
                     )}
@@ -326,17 +330,17 @@ function IncomingCallPopup() {
                     {isCallActive && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Delivery Status
+                          🚚 Delivery Status
                         </label>
                         <select
                           value={deliveryStatus}
                           onChange={(e) => handleDeliveryStatusChange(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         >
-                          <option value="pending">Pending</option>
-                          <option value="started">Delivery Started</option>
-                          <option value="completed">Completed</option>
-                          <option value="cancelled">Cancelled</option>
+                          <option value="pending">⏳ Pending</option>
+                          <option value="started">🚛 Delivery Started</option>
+                          <option value="completed">✅ Completed</option>
+                          <option value="cancelled">❌ Cancelled</option>
                         </select>
                       </div>
                     )}
@@ -345,7 +349,7 @@ function IncomingCallPopup() {
                     {isCallActive && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Call Notes
+                          📝 Call Notes
                         </label>
                         <textarea
                           value={callNote}
@@ -361,16 +365,16 @@ function IncomingCallPopup() {
                   /* Unknown Caller */
                   <div className="text-center py-6">
                     <SafeIcon icon={FiUser} className="mx-auto h-12 w-12 text-gray-400" />
-                    <h5 className="mt-2 text-lg font-medium text-gray-900">Unknown Caller</h5>
+                    <h5 className="mt-2 text-lg font-medium text-gray-900">❓ Unknown Caller</h5>
                     <p className="text-sm text-gray-500 mt-1">
-                      This number is not in your database
+                      This number is not in your customer database
                     </p>
                     <button
                       onClick={() => setShowCreateCaller(true)}
                       className="mt-4 inline-flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                     >
                       <SafeIcon icon={FiPlus} className="w-4 h-4" />
-                      <span>Create Customer</span>
+                      <span>Create New Customer</span>
                     </button>
                   </div>
                 )}
@@ -389,7 +393,7 @@ function IncomingCallPopup() {
                     </button>
                     <button
                       onClick={handleAnswer}
-                      className="flex-1 flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                      className="flex-1 flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors animate-pulse"
                     >
                       <SafeIcon icon={FiPhone} className="w-5 h-5" />
                       <span>Answer</span>

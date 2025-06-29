@@ -12,6 +12,7 @@ class SIPService {
     this.callSession = null;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
+    this.simulationTimer = null;
   }
 
   async initialize(companyId) {
@@ -57,11 +58,6 @@ class SIPService {
   }
 
   async registerSIP() {
-    // Simulate SIP registration process
-    // In real implementation, this would use:
-    // - PJSIP library for Python backend
-    // - SIP.js for JavaScript/WebRTC implementation
-    
     console.log('Registering SIP account...', {
       username: this.sipConfig.username,
       domain: this.sipConfig.domain,
@@ -71,25 +67,47 @@ class SIPService {
     });
 
     // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Simulate success/failure
-    const success = Math.random() > 0.2; // 80% success rate for demo
-    
-    if (success) {
-      console.log('SIP registration successful');
-      return true;
-    } else {
-      throw new Error('SIP registration failed: Invalid credentials or network error');
-    }
+    // Always succeed for demo - in production this would be real SIP registration
+    console.log('SIP registration successful');
+    return true;
   }
 
   startIncomingCallSimulation() {
-    // Simulate incoming calls every 30-60 seconds for demo
-    const simulateCall = () => {
+    // Clear any existing timer
+    if (this.simulationTimer) {
+      clearTimeout(this.simulationTimer);
+    }
+
+    // Simulate incoming calls every 15-30 seconds for demo
+    const scheduleNextCall = () => {
       if (!this.isMonitoring) return;
       
-      if (Math.random() > 0.7) { // 30% chance of incoming call
+      const delay = Math.random() * 15000 + 15000; // 15-30 seconds
+      
+      this.simulationTimer = setTimeout(() => {
+        if (this.isMonitoring) {
+          this.handleIncomingCall({
+            callId: `sip-call-${Date.now()}`,
+            callerNumber: this.getRandomCallerNumber(),
+            timestamp: new Date().toISOString(),
+            sipHeaders: {
+              'From': `sip:${this.getRandomCallerNumber()}@${this.sipConfig.domain}`,
+              'To': `sip:${this.sipConfig.username}@${this.sipConfig.domain}`,
+              'Call-ID': `call-${Date.now()}@${this.sipConfig.domain}`
+            }
+          });
+          
+          // Schedule next call
+          scheduleNextCall();
+        }
+      }, delay);
+    };
+    
+    // Start the first call after 5 seconds
+    setTimeout(() => {
+      if (this.isMonitoring) {
         this.handleIncomingCall({
           callId: `sip-call-${Date.now()}`,
           callerNumber: this.getRandomCallerNumber(),
@@ -100,26 +118,29 @@ class SIPService {
             'Call-ID': `call-${Date.now()}@${this.sipConfig.domain}`
           }
         });
+        
+        scheduleNextCall();
       }
-      
-      // Schedule next check
-      setTimeout(simulateCall, Math.random() * 30000 + 30000); // 30-60 seconds
-    };
-    
-    simulateCall();
+    }, 5000);
   }
 
   getRandomCallerNumber() {
     const knownNumbers = ['+1234567890', '+0987654321', '+1122334455'];
-    const unknownNumbers = ['+1555000001', '+1555000002', '+1555000003'];
+    const unknownNumbers = ['+1555000001', '+1555000002', '+1555000003', '+1666777888'];
     const allNumbers = [...knownNumbers, ...unknownNumbers];
     
     return allNumbers[Math.floor(Math.random() * allNumbers.length)];
   }
 
   async handleIncomingCall(sipCallData) {
-    const { setIncomingCall, addCallLog } = useCallStore.getState();
+    const { setIncomingCall, addCallLog, incomingCall } = useCallStore.getState();
     const { getUserCompanyId } = useAuthStore.getState();
+
+    // Don't handle new calls if there's already an active incoming call
+    if (incomingCall) {
+      console.log('Call blocked - another call is already active');
+      return;
+    }
 
     const companyId = getUserCompanyId();
     if (!companyId) return;
@@ -154,7 +175,7 @@ class SIPService {
       addCallLog(callLog);
       setIncomingCall(incomingCallData);
 
-      // Play notification sound (optional)
+      // Play notification sound
       this.playNotificationSound();
 
       console.log('Incoming call processed:', {
@@ -190,14 +211,16 @@ class SIPService {
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
       
+      // Create a ringing sound pattern
       oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-      oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+      oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.2);
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.4);
       
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
       
       oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.5);
+      oscillator.stop(audioContext.currentTime + 0.8);
     } catch (error) {
       console.warn('Could not play notification sound:', error);
     }
@@ -207,7 +230,7 @@ class SIPService {
     try {
       // Update call status to answered
       await callLogsAPI.updateStatus(callLogId, 'answered', {
-        ended_at: null // Call is ongoing
+        answered_at: new Date().toISOString()
       });
       
       console.log('Call answered:', callLogId);
@@ -252,7 +275,18 @@ class SIPService {
   stopMonitoring() {
     this.isMonitoring = false;
     this.isRegistered = false;
+    
+    // Clear simulation timer
+    if (this.simulationTimer) {
+      clearTimeout(this.simulationTimer);
+      this.simulationTimer = null;
+    }
+    
     console.log('SIP monitoring stopped');
+  }
+
+  getMonitoringStatus() {
+    return this.isMonitoring;
   }
 
   async testConnection() {
@@ -260,10 +294,12 @@ class SIPService {
       const success = await this.registerSIP();
       
       // Update test status in database
-      await sipAPI.updateTestStatus(this.sipConfig.company_id, {
-        last_test_status: success ? 'success' : 'failed',
-        last_test_at: new Date().toISOString()
-      });
+      if (this.sipConfig) {
+        await sipAPI.updateTestStatus(this.sipConfig.company_id, {
+          last_test_status: success ? 'success' : 'failed',
+          last_test_at: new Date().toISOString()
+        });
+      }
       
       return {
         success,
@@ -271,10 +307,12 @@ class SIPService {
         tested_at: new Date().toISOString()
       };
     } catch (error) {
-      await sipAPI.updateTestStatus(this.sipConfig.company_id, {
-        last_test_status: 'failed',
-        last_test_at: new Date().toISOString()
-      });
+      if (this.sipConfig) {
+        await sipAPI.updateTestStatus(this.sipConfig.company_id, {
+          last_test_status: 'failed',
+          last_test_at: new Date().toISOString()
+        });
+      }
       
       return {
         success: false,
@@ -308,5 +346,5 @@ if (typeof window !== 'undefined') {
   };
   
   // Check on load
-  setTimeout(checkAuthAndInitialize, 1000);
+  setTimeout(checkAuthAndInitialize, 2000);
 }
