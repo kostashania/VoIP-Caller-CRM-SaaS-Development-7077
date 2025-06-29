@@ -14,7 +14,7 @@ import UserManagement from './components/admin/UserManagement';
 import CompanyManagement from './components/superadmin/CompanyManagement';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
-import IncomingCallModal from './components/calls/IncomingCallModal';
+import IncomingCallPopup from './components/voip/IncomingCallPopup';
 
 function App() {
   const { user } = useAuthStore();
@@ -23,11 +23,20 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-        <Toaster position="top-right" />
-        
-        {/* Incoming Call Modal */}
-        {incomingCall && <IncomingCallModal />}
-        
+        <Toaster 
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+          }}
+        />
+
+        {/* VoIP Incoming Call Popup */}
+        {incomingCall && <IncomingCallPopup />}
+
         <Routes>
           {/* Public Routes */}
           <Route 
@@ -38,9 +47,15 @@ function App() {
             path="/register" 
             element={!user ? <Register /> : <Navigate to="/dashboard" />} 
           />
-          
+
           {/* Protected Routes */}
-          <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route 
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/caller/:id" element={<CallerDetails />} />
             <Route path="/settings" element={<Settings />} />
@@ -61,7 +76,7 @@ function App() {
               } 
             />
           </Route>
-          
+
           {/* Default Route */}
           <Route path="/" element={<Navigate to="/dashboard" />} />
         </Routes>

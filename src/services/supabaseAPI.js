@@ -8,6 +8,21 @@ const handleSupabaseError = (error, operation = 'Operation') => {
   throw new Error(message);
 };
 
+// Encryption helper (simplified for demo - use proper encryption in production)
+const encryptPassword = (password) => {
+  // In production, use proper encryption like AES-256
+  return btoa(password + '_encrypted_salt');
+};
+
+const decryptPassword = (encryptedPassword) => {
+  // In production, use proper decryption
+  try {
+    return atob(encryptedPassword).replace('_encrypted_salt', '');
+  } catch {
+    return encryptedPassword; // Fallback for demo
+  }
+};
+
 // Auth API
 export const authAPI = {
   login: async (email, password = 'demo') => {
@@ -53,6 +68,234 @@ export const authAPI = {
   }
 };
 
+// SIP Configuration API
+export const sipAPI = {
+  getConfig: async (companyId) => {
+    try {
+      const { data, error } = await supabase
+        .from('sip_configurations_crm_8x9p2k')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('is_active', true)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      
+      if (data && data.password_encrypted) {
+        // Decrypt password for use (in production, handle this securely)
+        data.password = decryptPassword(data.password_encrypted);
+      }
+      
+      return data || null;
+    } catch (error) {
+      handleSupabaseError(error, 'Get SIP configuration');
+    }
+  },
+
+  updateConfig: async (companyId, config) => {
+    try {
+      // Encrypt password before storing
+      const configToStore = { ...config };
+      if (config.password) {
+        configToStore.password_encrypted = encryptPassword(config.password);
+        delete configToStore.password; // Don't store plain password
+      }
+
+      const { data, error } = await supabase
+        .from('sip_configurations_crm_8x9p2k')
+        .upsert({
+          company_id: companyId,
+          ...configToStore,
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleSupabaseError(error, 'Update SIP configuration');
+    }
+  },
+
+  updateTestStatus: async (companyId, testResult) => {
+    try {
+      const { error } = await supabase
+        .from('sip_configurations_crm_8x9p2k')
+        .update({
+          ...testResult,
+          updated_at: new Date().toISOString()
+        })
+        .eq('company_id', companyId);
+
+      if (error) throw error;
+    } catch (error) {
+      handleSupabaseError(error, 'Update SIP test status');
+    }
+  },
+
+  testConnection: async (companyId, config) => {
+    try {
+      // Simulate SIP connection test
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      const success = Math.random() > 0.2; // 80% success rate for demo
+      const result = {
+        success,
+        message: success 
+          ? 'SIP connection successful' 
+          : 'SIP connection failed: Invalid credentials or network error',
+        tested_at: new Date().toISOString()
+      };
+
+      // Update test results
+      await sipAPI.updateTestStatus(companyId, {
+        last_test_status: result.success ? 'success' : 'failed',
+        last_test_at: result.tested_at
+      });
+
+      return result;
+    } catch (error) {
+      handleSupabaseError(error, 'Test SIP connection');
+    }
+  }
+};
+
+// Call Logs API
+export const callLogsAPI = {
+  getAll: async (companyId, filters = {}) => {
+    try {
+      let query = supabase
+        .from('call_logs_crm_8x9p2k')
+        .select(`
+          *,
+          caller:callers_crm_8x9p2k(
+            *,
+            addresses:addresses_crm_8x9p2k(*)
+          ),
+          selected_address:addresses_crm_8x9p2k(*)
+        `)
+        .eq('company_id', companyId);
+
+      // Apply filters
+      if (filters.status) {
+        query = query.eq('call_status', filters.status);
+      }
+      if (filters.direction) {
+        query = query.eq('call_direction', filters.direction);
+      }
+      if (filters.from_date) {
+        query = query.gte('timestamp', filters.from_date);
+      }
+      if (filters.to_date) {
+        query = query.lte('timestamp', filters.to_date);
+      }
+
+      const { data, error } = await query.order('timestamp', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      handleSupabaseError(error, 'Get call logs');
+    }
+  },
+
+  create: async (callData) => {
+    try {
+      const { data, error } = await supabase
+        .from('call_logs_crm_8x9p2k')
+        .insert(callData)
+        .select(`
+          *,
+          caller:callers_crm_8x9p2k(
+            *,
+            addresses:addresses_crm_8x9p2k(*)
+          )
+        `)
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleSupabaseError(error, 'Create call log');
+    }
+  },
+
+  updateStatus: async (id, status, metadata = {}) => {
+    try {
+      const { data, error } = await supabase
+        .from('call_logs_crm_8x9p2k')
+        .update({ call_status: status, ...metadata })
+        .eq('id', id)
+        .select(`
+          *,
+          caller:callers_crm_8x9p2k(
+            *,
+            addresses:addresses_crm_8x9p2k(*)
+          ),
+          selected_address:addresses_crm_8x9p2k(*)
+        `)
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleSupabaseError(error, 'Update call log status');
+    }
+  },
+
+  addNote: async (id, note) => {
+    try {
+      const { data, error } = await supabase
+        .from('call_logs_crm_8x9p2k')
+        .update({ call_note: note })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleSupabaseError(error, 'Add call note');
+    }
+  },
+
+  setSelectedAddress: async (id, addressId) => {
+    try {
+      const { data, error } = await supabase
+        .from('call_logs_crm_8x9p2k')
+        .update({ selected_address_id: addressId })
+        .eq('id', id)
+        .select(`
+          *,
+          selected_address:addresses_crm_8x9p2k(*)
+        `)
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleSupabaseError(error, 'Set selected address');
+    }
+  },
+
+  updateDeliveryStatus: async (id, deliveryStatus) => {
+    try {
+      const { data, error } = await supabase
+        .from('call_logs_crm_8x9p2k')
+        .update({ delivery_status: deliveryStatus })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      handleSupabaseError(error, 'Update delivery status');
+    }
+  }
+};
+
 // Companies API (for super admin)
 export const companiesAPI = {
   getAll: async () => {
@@ -62,6 +305,7 @@ export const companiesAPI = {
         .select(`
           *,
           voip_settings:voip_settings_crm_8x9p2k(*),
+          sip_config:sip_configurations_crm_8x9p2k(*),
           user_count:users_crm_8x9p2k(count)
         `)
         .eq('is_active', true)
@@ -139,7 +383,7 @@ export const companiesAPI = {
   }
 };
 
-// VoIP Settings API
+// VoIP Settings API (legacy - keeping for compatibility)
 export const voipAPI = {
   getSettings: async (companyId) => {
     try {
@@ -149,7 +393,7 @@ export const voipAPI = {
         .eq('company_id', companyId)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows returned
+      if (error && error.code !== 'PGRST116') throw error;
       return data || null;
     } catch (error) {
       handleSupabaseError(error, 'Get VoIP settings');
@@ -177,7 +421,6 @@ export const voipAPI = {
 
   testConnection: async (companyId, settings) => {
     try {
-      // Simulate connection test
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       const success = Math.random() > 0.3;
@@ -187,7 +430,6 @@ export const voipAPI = {
         tested_at: new Date().toISOString()
       };
 
-      // Update test results
       await supabase
         .from('voip_settings_crm_8x9p2k')
         .upsert({
@@ -435,87 +677,25 @@ export const addressesAPI = {
   }
 };
 
-// Calls API
+// Legacy calls API (keeping for compatibility)
 export const callsAPI = {
   getAll: async (companyId, filters = {}) => {
-    try {
-      let query = supabase
-        .from('calls_crm_8x9p2k')
-        .select(`
-          *,
-          caller:callers_crm_8x9p2k(
-            *,
-            addresses:addresses_crm_8x9p2k(*)
-          )
-        `)
-        .eq('company_id', companyId);
-
-      // Apply filters
-      if (filters.status) {
-        query = query.eq('call_status', filters.status);
-      }
-      if (filters.from_date) {
-        query = query.gte('timestamp', filters.from_date);
-      }
-      if (filters.to_date) {
-        query = query.lte('timestamp', filters.to_date);
-      }
-
-      const { data, error } = await query.order('timestamp', { ascending: false });
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      handleSupabaseError(error, 'Get calls');
-    }
+    return callLogsAPI.getAll(companyId, filters);
   },
 
   create: async (callData) => {
-    try {
-      const { data, error } = await supabase
-        .from('calls_crm_8x9p2k')
-        .insert(callData)
-        .select(`
-          *,
-          caller:callers_crm_8x9p2k(
-            *,
-            addresses:addresses_crm_8x9p2k(*)
-          )
-        `)
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      handleSupabaseError(error, 'Create call');
-    }
+    return callLogsAPI.create(callData);
   },
 
   updateStatus: async (id, status, metadata = {}) => {
-    try {
-      const { data, error } = await supabase
-        .from('calls_crm_8x9p2k')
-        .update({ call_status: status, ...metadata })
-        .eq('id', id)
-        .select(`
-          *,
-          caller:callers_crm_8x9p2k(
-            *,
-            addresses:addresses_crm_8x9p2k(*)
-          )
-        `)
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      handleSupabaseError(error, 'Update call status');
-    }
+    return callLogsAPI.updateStatus(id, status, metadata);
   }
 };
 
 export default {
   auth: authAPI,
+  sip: sipAPI,
+  callLogs: callLogsAPI,
   companies: companiesAPI,
   voip: voipAPI,
   users: usersAPI,

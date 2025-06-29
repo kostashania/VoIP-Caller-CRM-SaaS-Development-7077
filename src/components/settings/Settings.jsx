@@ -6,11 +6,12 @@ import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { useAuthStore } from '../../store/authStore';
 import { voipAPI } from '../../services/supabaseAPI';
+import SipSettings from '../voip/SipSettings';
 
 const { FiSettings, FiPhone, FiGlobe, FiUser, FiLock, FiCheckCircle, FiAlertCircle } = FiIcons;
 
 function Settings() {
-  const [activeTab, setActiveTab] = useState('voip');
+  const [activeTab, setActiveTab] = useState('sip');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -21,7 +22,7 @@ function Settings() {
   useEffect(() => {
     const loadVoipSettings = async () => {
       if (!hasRole('admin')) return;
-      
+
       try {
         setIsLoading(true);
         const companyId = getUserCompanyId();
@@ -35,7 +36,7 @@ function Settings() {
           setValue('sipId', settings.sip_id || '');
           setValue('protocol', settings.protocol || 'SIP');
           setValue('webhookSecret', settings.webhook_secret || '');
-          
+
           if (settings.last_test_status) {
             setConnectionStatus({
               success: settings.last_test_status === 'success',
@@ -93,7 +94,7 @@ function Settings() {
 
       setIsTestingConnection(true);
       const formData = watch();
-      
+
       const result = await voipAPI.testConnection(companyId, {
         voip_url: formData.voipUrl,
         voip_username: formData.voipUsername,
@@ -102,7 +103,7 @@ function Settings() {
       });
 
       setConnectionStatus(result);
-      
+
       if (result.success) {
         toast.success('Connection test successful');
       } else {
@@ -110,8 +111,8 @@ function Settings() {
       }
     } catch (error) {
       console.error('Connection test failed:', error);
-      setConnectionStatus({ 
-        success: false, 
+      setConnectionStatus({
+        success: false,
         message: error.message || 'Connection test failed',
         tested_at: new Date().toISOString()
       });
@@ -122,7 +123,8 @@ function Settings() {
   };
 
   const tabs = [
-    { id: 'voip', name: 'VoIP Settings', icon: FiPhone },
+    { id: 'sip', name: 'SIP/VoIP Settings', icon: FiPhone },
+    { id: 'voip', name: 'Legacy VoIP', icon: FiGlobe },
     { id: 'profile', name: 'Profile', icon: FiUser },
   ];
 
@@ -167,6 +169,15 @@ function Settings() {
 
         {/* Tab Content */}
         <div className="p-6">
+          {activeTab === 'sip' && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+            >
+              <SipSettings />
+            </motion.div>
+          )}
+
           {activeTab === 'voip' && (
             <motion.div
               initial={{ opacity: 0, x: 20 }}
@@ -174,9 +185,9 @@ function Settings() {
               className="space-y-6"
             >
               <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">VoIP Integration</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Legacy VoIP Integration</h3>
                 <p className="text-sm text-gray-500 mb-6">
-                  Configure your VoIP service connection to receive incoming call notifications.
+                  Configure your legacy VoIP service connection to receive incoming call notifications.
                   {!hasRole('admin') && (
                     <span className="block text-red-500 mt-1">
                       Only admins can modify VoIP settings.
