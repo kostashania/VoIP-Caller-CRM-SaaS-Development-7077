@@ -10,7 +10,7 @@ import { sipService } from '../../services/sipService';
 
 const { 
   FiPhone, FiServer, FiLock, FiSettings, FiPlay, FiStop,
-  FiCheckCircle, FiAlertCircle, FiGlobe, FiShield
+  FiCheckCircle, FiAlertCircle, FiGlobe, FiShield, FiEye, FiDatabase
 } = FiIcons;
 
 function SipSettings() {
@@ -19,6 +19,8 @@ function SipSettings() {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [savedConfig, setSavedConfig] = useState(null);
+  const [loadingSavedConfig, setLoadingSavedConfig] = useState(false);
   const { getUserCompanyId, hasRole } = useAuthStore();
   
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm({
@@ -30,6 +32,7 @@ function SipSettings() {
 
   useEffect(() => {
     loadSipSettings();
+    loadSavedConfig();
     // Check monitoring status
     setIsMonitoring(sipService.getMonitoringStatus());
   }, []);
@@ -67,6 +70,21 @@ function SipSettings() {
     }
   };
 
+  const loadSavedConfig = async () => {
+    try {
+      setLoadingSavedConfig(true);
+      const companyId = getUserCompanyId();
+      if (!companyId) return;
+
+      const config = await sipAPI.getConfig(companyId);
+      setSavedConfig(config);
+    } catch (error) {
+      console.error('Failed to load saved SIP config:', error);
+    } finally {
+      setLoadingSavedConfig(false);
+    }
+  };
+
   const onSubmit = async (data) => {
     try {
       setIsSaving(true);
@@ -87,10 +105,14 @@ function SipSettings() {
       // Only include password if provided
       if (data.password && data.password.trim()) {
         configData.password = data.password;
+        console.log('Saving SIP config with new password');
+      } else {
+        console.log('Saving SIP config without password change');
       }
 
       console.log('Saving SIP config:', configData);
-      await sipAPI.updateConfig(companyId, configData);
+      const savedData = await sipAPI.updateConfig(companyId, configData);
+      console.log('SIP config saved successfully:', savedData);
       
       toast.success('SIP settings saved successfully', {
         duration: 2000
@@ -101,6 +123,9 @@ function SipSettings() {
       
       // Clear password field after successful save
       setValue('password', '');
+      
+      // Reload saved config display
+      await loadSavedConfig();
       
     } catch (error) {
       console.error('Failed to save SIP settings:', error);
@@ -158,12 +183,12 @@ function SipSettings() {
         setIsMonitoring(false);
         toast.success('SIP monitoring stopped', { duration: 2000 });
       } else {
-        // Make sure settings are saved first
-        const formData = watch();
-        if (formData.username && formData.domain) {
-          await onSubmit(formData);
+        // Check if we have saved SIP configuration
+        if (!savedConfig || !savedConfig.username || !savedConfig.domain) {
+          toast.error('Please save SIP configuration first before starting monitoring');
+          return;
         }
-        
+
         await sipService.initialize(companyId);
         const success = await sipService.startMonitoring();
         
@@ -173,7 +198,7 @@ function SipSettings() {
             duration: 3000 
           });
         } else {
-          toast.error('Failed to start SIP monitoring');
+          toast.error('Failed to start SIP monitoring - check your configuration');
         }
       }
     } catch (error) {
@@ -300,9 +325,14 @@ function SipSettings() {
                       type="password"
                       disabled={!hasRole('admin')}
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
-                      placeholder={hasRole('admin') ? "Leave blank to keep current password" : "Hidden"}
+                      placeholder={hasRole('admin') ? "Enter new password (leave blank to keep current)" : "Hidden"}
                     />
                   </div>
+                  {hasRole('admin') && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Leave blank to keep current password. Enter new password to update.
+                    </p>
+                  )}
                 </div>
 
                 {/* SIP Proxy */}
@@ -394,24 +424,6 @@ function SipSettings() {
                 </div>
               )}
 
-              {/* Provider Examples */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="text-sm font-medium text-gray-900 mb-2">
-                  Popular SIP Providers
-                </h4>
-                <div className="space-y-2 text-sm text-gray-600">
-                  <div>
-                    <strong>Modulus.gr:</strong> Domain: sip.modulus.gr, Proxy: proxy.modulus.gr
-                  </div>
-                  <div>
-                    <strong>Linphone.org:</strong> Domain: sip.linphone.org
-                  </div>
-                  <div>
-                    <strong>FreePBX:</strong> Domain: your-server.com, Port: 5060
-                  </div>
-                </div>
-              </div>
-
               {/* Actions - Only show to admins */}
               {hasRole('admin') && (
                 <div className="flex space-x-3">
@@ -436,6 +448,146 @@ function SipSettings() {
               )}
             </form>
           )}
+        </div>
+      </div>
+
+      {/* Current Saved Settings Display */}
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-4 py-5 sm:p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <SafeIcon icon={FiDatabase} className="h-5 w-5 text-gray-400" />
+            <h3 className="text-lg font-medium text-gray-900">Current Saved Configuration</h3>
+          </div>
+          
+          {loadingSavedConfig ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+            </div>
+          ) : savedConfig ? (
+            <div className="bg-gray-50 rounded-lg p-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Username
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900 font-mono">
+                    {savedConfig.username || 'Not set'}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Domain
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900 font-mono">
+                    {savedConfig.domain || 'Not set'}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Password
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {savedConfig.password_encrypted ? '••••••••' : 'Not set'}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Proxy
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900 font-mono">
+                    {savedConfig.proxy || 'Not set'}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Transport
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {savedConfig.transport || 'UDP'}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Port
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {savedConfig.port || '5060'}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Status
+                  </label>
+                  <p className={`mt-1 text-sm ${savedConfig.is_active ? 'text-green-600' : 'text-red-600'}`}>
+                    {savedConfig.is_active ? 'Active' : 'Inactive'}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Last Updated
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {savedConfig.updated_at 
+                      ? new Date(savedConfig.updated_at).toLocaleString()
+                      : 'Never'
+                    }
+                  </p>
+                </div>
+              </div>
+              
+              {savedConfig.last_test_at && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="flex items-center space-x-2">
+                    <SafeIcon 
+                      icon={savedConfig.last_test_status === 'success' ? FiCheckCircle : FiAlertCircle}
+                      className={`h-4 w-4 ${
+                        savedConfig.last_test_status === 'success' ? 'text-green-500' : 'text-red-500'
+                      }`}
+                    />
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Last Test:
+                    </span>
+                    <span className={`text-sm ${
+                      savedConfig.last_test_status === 'success' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {savedConfig.last_test_status} - {new Date(savedConfig.last_test_at).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-6">
+              <SafeIcon icon={FiDatabase} className="mx-auto h-8 w-8 text-gray-400" />
+              <p className="mt-2 text-sm text-gray-500">No SIP configuration saved yet</p>
+              <p className="text-xs text-gray-400">Save your settings above to see them here</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Provider Examples */}
+      <div className="bg-gray-50 rounded-lg p-4">
+        <h4 className="text-sm font-medium text-gray-900 mb-2">
+          Popular SIP Providers
+        </h4>
+        <div className="space-y-2 text-sm text-gray-600">
+          <div>
+            <strong>Modulus.gr:</strong> Domain: sip.modulus.gr, Proxy: proxy.modulus.gr
+          </div>
+          <div>
+            <strong>Linphone.org:</strong> Domain: sip.linphone.org
+          </div>
+          <div>
+            <strong>FreePBX:</strong> Domain: your-server.com, Port: 5060
+          </div>
         </div>
       </div>
 
@@ -474,7 +626,7 @@ function SipSettings() {
             </h4>
             <p className="mt-1 text-sm text-yellow-700">
               This is a demonstration of SIP integration. In production, this would connect to real SIP providers.
-              Click "Start Monitoring" to begin receiving simulated incoming calls.
+              Save your SIP configuration first, then click "Start Monitoring" to begin receiving simulated incoming calls.
             </p>
           </div>
         </div>

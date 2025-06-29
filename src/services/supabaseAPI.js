@@ -80,12 +80,12 @@ export const sipAPI = {
         .single();
 
       if (error && error.code !== 'PGRST116') throw error;
-      
+
       if (data && data.password_encrypted) {
         // Decrypt password for use (in production, handle this securely)
         data.password = decryptPassword(data.password_encrypted);
       }
-      
+
       return data || null;
     } catch (error) {
       handleSupabaseError(error, 'Get SIP configuration');
@@ -94,25 +94,62 @@ export const sipAPI = {
 
   updateConfig: async (companyId, config) => {
     try {
-      // Encrypt password before storing
+      // Prepare config for storage
       const configToStore = { ...config };
-      if (config.password) {
+      
+      // Always encrypt password if provided
+      if (config.password && config.password.trim()) {
         configToStore.password_encrypted = encryptPassword(config.password);
         delete configToStore.password; // Don't store plain password
+        console.log('Password encrypted and will be saved');
+      } else {
+        // If no password provided, don't update the password field
+        delete configToStore.password;
+        console.log('No password provided, keeping existing password');
       }
 
-      const { data, error } = await supabase
+      // Check if record exists
+      const { data: existing } = await supabase
         .from('sip_configurations_crm_8x9p2k')
-        .upsert({
-          company_id: companyId,
-          ...configToStore,
-          updated_at: new Date().toISOString()
-        })
-        .select()
+        .select('id')
+        .eq('company_id', companyId)
         .single();
 
-      if (error) throw error;
-      return data;
+      let result;
+      if (existing) {
+        // Update existing record
+        const { data, error } = await supabase
+          .from('sip_configurations_crm_8x9p2k')
+          .update({
+            ...configToStore,
+            updated_at: new Date().toISOString()
+          })
+          .eq('company_id', companyId)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        result = data;
+        console.log('SIP config updated:', result);
+      } else {
+        // Insert new record
+        const { data, error } = await supabase
+          .from('sip_configurations_crm_8x9p2k')
+          .insert({
+            company_id: companyId,
+            ...configToStore,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        result = data;
+        console.log('SIP config created:', result);
+      }
+
+      return result;
     } catch (error) {
       handleSupabaseError(error, 'Update SIP configuration');
     }
@@ -140,6 +177,7 @@ export const sipAPI = {
       await new Promise(resolve => setTimeout(resolve, 3000));
       
       const success = Math.random() > 0.2; // 80% success rate for demo
+      
       const result = {
         success,
         message: success 
@@ -192,8 +230,8 @@ export const callLogsAPI = {
       }
 
       const { data, error } = await query.order('timestamp', { ascending: false });
-
       if (error) throw error;
+
       return data || [];
     } catch (error) {
       handleSupabaseError(error, 'Get call logs');
@@ -225,7 +263,10 @@ export const callLogsAPI = {
     try {
       const { data, error } = await supabase
         .from('call_logs_crm_8x9p2k')
-        .update({ call_status: status, ...metadata })
+        .update({
+          call_status: status,
+          ...metadata
+        })
         .eq('id', id)
         .select(`
           *,
@@ -463,8 +504,8 @@ export const usersAPI = {
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
-
       if (error) throw error;
+
       return data || [];
     } catch (error) {
       handleSupabaseError(error, 'Get users');
@@ -493,7 +534,10 @@ export const usersAPI = {
     try {
       const { data, error } = await supabase
         .from('users_crm_8x9p2k')
-        .update({ ...userData, updated_at: new Date().toISOString() })
+        .update({
+          ...userData,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
         .select()
         .single();
@@ -601,7 +645,10 @@ export const callersAPI = {
     try {
       const { data, error } = await supabase
         .from('callers_crm_8x9p2k')
-        .update({ ...callerData, updated_at: new Date().toISOString() })
+        .update({
+          ...callerData,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
         .select(`
           *,
