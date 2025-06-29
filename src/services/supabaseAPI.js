@@ -78,7 +78,7 @@ export const sipAPI = {
         .from('sip_configurations_crm_8x9p2k')
         .select('*')
         .eq('company_id', companyId)
-        .maybeSingle(); // Use maybeSingle instead of single to avoid error when no record exists
+        .maybeSingle(); // Use maybeSingle instead of single
 
       if (error) {
         console.error('Error getting SIP config:', error);
@@ -114,33 +114,53 @@ export const sipAPI = {
       } else {
         // If no password provided, don't update the password field
         delete configToStore.password;
-        delete configToStore.password_encrypted; // Don't overwrite existing encrypted password
         console.log('No password provided, keeping existing password');
       }
 
-      // Check if record exists
-      const { data: existing, error: existingError } = await supabase
+      // First check if any record exists for this company
+      const { data: existingRecords, error: checkError } = await supabase
         .from('sip_configurations_crm_8x9p2k')
-        .select('id, password_encrypted')
-        .eq('company_id', companyId)
-        .maybeSingle();
+        .select('*')
+        .eq('company_id', companyId);
 
-      if (existingError) {
-        console.error('Error checking existing config:', existingError);
-        throw existingError;
+      if (checkError) {
+        console.error('Error checking existing configs:', checkError);
+        throw checkError;
       }
 
+      console.log('Existing records found:', existingRecords?.length || 0);
+
       let result;
-      if (existing) {
-        // Update existing record
+
+      if (existingRecords && existingRecords.length > 0) {
+        // If multiple records exist, delete all but keep the first one's password if needed
+        if (existingRecords.length > 1) {
+          console.log('Multiple records found, cleaning up...');
+          
+          // Keep the first record, delete the rest
+          const recordToKeep = existingRecords[0];
+          const recordsToDelete = existingRecords.slice(1);
+          
+          for (const record of recordsToDelete) {
+            await supabase
+              .from('sip_configurations_crm_8x9p2k')
+              .delete()
+              .eq('id', record.id);
+          }
+          
+          console.log(`Deleted ${recordsToDelete.length} duplicate records`);
+        }
+
+        // Update the remaining record
+        const recordToUpdate = existingRecords[0];
         const updateData = {
           ...configToStore,
           updated_at: new Date().toISOString()
         };
 
         // If no new password provided, keep the existing encrypted password
-        if (!config.password && existing.password_encrypted) {
-          updateData.password_encrypted = existing.password_encrypted;
+        if (!config.password && recordToUpdate.password_encrypted) {
+          updateData.password_encrypted = recordToUpdate.password_encrypted;
         }
 
         console.log('Updating existing SIP config with:', updateData);
@@ -148,9 +168,9 @@ export const sipAPI = {
         const { data, error } = await supabase
           .from('sip_configurations_crm_8x9p2k')
           .update(updateData)
-          .eq('company_id', companyId)
+          .eq('id', recordToUpdate.id)
           .select()
-          .single();
+          .maybeSingle(); // Use maybeSingle instead of single
         
         if (error) {
           console.error('Error updating SIP config:', error);
@@ -174,7 +194,7 @@ export const sipAPI = {
           .from('sip_configurations_crm_8x9p2k')
           .insert(insertData)
           .select()
-          .single();
+          .maybeSingle(); // Use maybeSingle instead of single
         
         if (error) {
           console.error('Error creating SIP config:', error);
@@ -194,17 +214,35 @@ export const sipAPI = {
 
   updateTestStatus: async (companyId, testResult) => {
     try {
+      // Find the record first
+      const { data: existing, error: findError } = await supabase
+        .from('sip_configurations_crm_8x9p2k')
+        .select('id')
+        .eq('company_id', companyId)
+        .maybeSingle();
+
+      if (findError) {
+        console.error('Error finding SIP config for test update:', findError);
+        throw findError;
+      }
+
+      if (!existing) {
+        console.log('No SIP config found for test status update');
+        return;
+      }
+
       const { error } = await supabase
         .from('sip_configurations_crm_8x9p2k')
         .update({
           ...testResult,
           updated_at: new Date().toISOString()
         })
-        .eq('company_id', companyId);
+        .eq('id', existing.id);
 
       if (error) throw error;
     } catch (error) {
-      handleSupabaseError(error, 'Update SIP test status');
+      console.error('Failed to update SIP test status:', error);
+      // Don't throw here as this is not critical
     }
   },
 
@@ -469,7 +507,7 @@ export const voipAPI = {
         .from('voip_settings_crm_8x9p2k')
         .select('*')
         .eq('company_id', companyId)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
       return data || null;
@@ -651,7 +689,7 @@ export const callersAPI = {
         .eq('company_id', companyId)
         .eq('phone_number', phoneNumber)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
       return data || null;
