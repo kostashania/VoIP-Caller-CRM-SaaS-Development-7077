@@ -8,19 +8,18 @@ import { useAuthStore } from '../../store/authStore';
 import { sipAPI } from '../../services/supabaseAPI';
 import { sipService } from '../../services/sipService';
 
-const { 
-  FiPhone, FiServer, FiLock, FiSettings, FiPlay, FiStop,
-  FiCheckCircle, FiAlertCircle, FiGlobe, FiShield, FiEye, FiDatabase
-} = FiIcons;
+const { FiPhone, FiServer, FiLock, FiSettings, FiPlay, FiStop, FiCheckCircle, FiAlertCircle, FiGlobe, FiShield, FiEye, FiDatabase, FiInfo } = FiIcons;
 
 function SipSettings() {
   const [isLoading, setIsLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState(null);
+  const [registrationStatus, setRegistrationStatus] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [savedConfig, setSavedConfig] = useState(null);
   const [loadingSavedConfig, setLoadingSavedConfig] = useState(false);
+  
   const { getUserCompanyId, hasRole } = useAuthStore();
   
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm({
@@ -33,8 +32,13 @@ function SipSettings() {
   useEffect(() => {
     loadSipSettings();
     loadSavedConfig();
+    
     // Check monitoring status
     setIsMonitoring(sipService.getMonitoringStatus());
+    
+    // Get registration status
+    const regStatus = sipService.getRegistrationStatus();
+    setRegistrationStatus(regStatus);
   }, []);
 
   const loadSipSettings = async () => {
@@ -51,7 +55,7 @@ function SipSettings() {
         setValue('transport', config.transport || 'UDP');
         setValue('port', config.port || 5060);
         setValue('password', ''); // Don't populate password for security
-        
+
         if (config.last_test_status) {
           setConnectionStatus({
             success: config.last_test_status === 'success',
@@ -113,20 +117,22 @@ function SipSettings() {
       console.log('Saving SIP config:', configData);
       const savedData = await sipAPI.updateConfig(companyId, configData);
       console.log('SIP config saved successfully:', savedData);
-      
-      toast.success('SIP settings saved successfully', {
-        duration: 2000
-      });
-      
+
+      toast.success('SIP settings saved successfully', { duration: 2000 });
+
       // Reinitialize SIP service with new settings
       await sipService.initialize(companyId);
-      
+
       // Clear password field after successful save
       setValue('password', '');
-      
+
       // Reload saved config display
       await loadSavedConfig();
-      
+
+      // Update registration status
+      const regStatus = sipService.getRegistrationStatus();
+      setRegistrationStatus(regStatus);
+
     } catch (error) {
       console.error('Failed to save SIP settings:', error);
       toast.error(error.message || 'Failed to save SIP settings');
@@ -144,17 +150,21 @@ function SipSettings() {
 
       setIsTesting(true);
       const formData = watch();
-      
+
       // First save the settings if they've changed
       if (formData.username && formData.domain) {
         await onSubmit(formData);
       }
-      
-      const result = await sipAPI.testConnection(companyId, formData);
+
+      const result = await sipService.testConnection();
       setConnectionStatus(result);
-      
+
       if (result.success) {
         toast.success('SIP connection test successful', { duration: 2000 });
+        
+        // Update registration status
+        const regStatus = sipService.getRegistrationStatus();
+        setRegistrationStatus(regStatus);
       } else {
         toast.error('SIP connection test failed', { duration: 3000 });
       }
@@ -181,6 +191,7 @@ function SipSettings() {
       if (isMonitoring) {
         sipService.stopMonitoring();
         setIsMonitoring(false);
+        setRegistrationStatus(sipService.getRegistrationStatus());
         toast.success('SIP monitoring stopped', { duration: 2000 });
       } else {
         // Check if we have saved SIP configuration
@@ -194,9 +205,8 @@ function SipSettings() {
         
         if (success) {
           setIsMonitoring(true);
-          toast.success('SIP monitoring started - incoming calls will appear as popups', { 
-            duration: 3000 
-          });
+          setRegistrationStatus(sipService.getRegistrationStatus());
+          toast.success('SIP monitoring started - incoming calls will appear as popups', { duration: 3000 });
         } else {
           toast.error('Failed to start SIP monitoring - check your configuration');
         }
@@ -218,25 +228,23 @@ function SipSettings() {
                 Configure SIP settings to enable incoming call detection and monitoring.
               </p>
             </div>
-            
+
             {/* Monitoring Status - Available to all users */}
             <div className="flex items-center space-x-3">
               <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
-                isMonitoring 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-gray-100 text-gray-800'
+                isMonitoring ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
               }`}>
                 <div className={`w-2 h-2 rounded-full ${
                   isMonitoring ? 'bg-green-500' : 'bg-gray-400'
                 }`}></div>
                 <span>{isMonitoring ? 'Monitoring Active' : 'Monitoring Stopped'}</span>
               </div>
-              
+
               <button
                 onClick={toggleMonitoring}
                 className={`inline-flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isMonitoring
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                  isMonitoring 
+                    ? 'bg-red-600 hover:bg-red-700 text-white' 
                     : 'bg-green-600 hover:bg-green-700 text-white'
                 }`}
               >
@@ -245,6 +253,32 @@ function SipSettings() {
               </button>
             </div>
           </div>
+
+          {/* Registration Status */}
+          {registrationStatus && registrationStatus.config && (
+            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center space-x-2">
+                <SafeIcon icon={FiPhone} className="h-5 w-5 text-blue-600" />
+                <h4 className="text-sm font-medium text-blue-900">SIP Registration Status</h4>
+              </div>
+              <div className="mt-2 space-y-1">
+                <p className="text-sm text-blue-700">
+                  <strong>Registered as:</strong> {registrationStatus.config.registered_as}
+                </p>
+                <p className="text-sm text-blue-700">
+                  <strong>Status:</strong> 
+                  <span className={`ml-1 ${registrationStatus.isRegistered ? 'text-green-600' : 'text-red-600'}`}>
+                    {registrationStatus.isRegistered ? '✅ Registered' : '❌ Not Registered'}
+                  </span>
+                </p>
+                {registrationStatus.isRegistered && (
+                  <p className="text-xs text-blue-600 mt-2">
+                    📞 Ready to receive calls! You can now call: <strong>{registrationStatus.config.registered_as}</strong>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {!hasRole('admin') && (
             <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -277,16 +311,21 @@ function SipSettings() {
                       <SafeIcon icon={FiPhone} className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
-                      {...register('username', { required: hasRole('admin') ? 'SIP Username is required' : false })}
+                      {...register('username', { 
+                        required: hasRole('admin') ? 'SIP Username is required' : false
+                      })}
                       type="text"
                       disabled={!hasRole('admin')}
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
-                      placeholder="your_sip_username"
+                      placeholder="kostashania"
                     />
                   </div>
                   {errors.username && (
                     <p className="mt-1 text-sm text-red-600">{errors.username.message}</p>
                   )}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Enter your SIP username (without @domain)
+                  </p>
                 </div>
 
                 {/* SIP Domain */}
@@ -299,16 +338,21 @@ function SipSettings() {
                       <SafeIcon icon={FiGlobe} className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
-                      {...register('domain', { required: hasRole('admin') ? 'SIP Domain is required' : false })}
+                      {...register('domain', { 
+                        required: hasRole('admin') ? 'SIP Domain is required' : false
+                      })}
                       type="text"
                       disabled={!hasRole('admin')}
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
-                      placeholder="sip.modulus.gr"
+                      placeholder="sip.linphone.org"
                     />
                   </div>
                   {errors.domain && (
                     <p className="mt-1 text-sm text-red-600">{errors.domain.message}</p>
                   )}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Your SIP provider's domain (e.g., sip.linphone.org)
+                  </p>
                 </div>
 
                 {/* SIP Password */}
@@ -349,9 +393,12 @@ function SipSettings() {
                       type="text"
                       disabled={!hasRole('admin')}
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
-                      placeholder="proxy.modulus.gr"
+                      placeholder="proxy.linphone.org"
                     />
                   </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Optional proxy server (usually same as domain)
+                  </p>
                 </div>
 
                 {/* Transport */}
@@ -376,7 +423,7 @@ function SipSettings() {
                     SIP Port
                   </label>
                   <input
-                    {...register('port', { 
+                    {...register('port', {
                       required: hasRole('admin') ? 'Port is required' : false,
                       min: { value: 1024, message: 'Port must be >= 1024' },
                       max: { value: 65535, message: 'Port must be <= 65535' }
@@ -400,10 +447,10 @@ function SipSettings() {
                   <div className="flex">
                     <div className="flex-shrink-0">
                       <SafeIcon 
-                        icon={connectionStatus.success ? FiCheckCircle : FiAlertCircle}
+                        icon={connectionStatus.success ? FiCheckCircle : FiAlertCircle} 
                         className={`h-5 w-5 ${
                           connectionStatus.success ? 'text-green-400' : 'text-red-400'
-                        }`}
+                        }`} 
                       />
                     </div>
                     <div className="ml-3">
@@ -436,7 +483,7 @@ function SipSettings() {
                     <SafeIcon icon={FiSettings} className="w-4 h-4" />
                     <span>{isTesting ? 'Testing...' : 'Test Connection'}</span>
                   </button>
-                  
+
                   <button
                     type="submit"
                     disabled={isSaving}
@@ -458,7 +505,7 @@ function SipSettings() {
             <SafeIcon icon={FiDatabase} className="h-5 w-5 text-gray-400" />
             <h3 className="text-lg font-medium text-gray-900">Current Saved Configuration</h3>
           </div>
-          
+
           {loadingSavedConfig ? (
             <div className="flex items-center justify-center py-4">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
@@ -474,7 +521,7 @@ function SipSettings() {
                     {savedConfig.username || 'Not set'}
                   </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
                     Domain
@@ -483,7 +530,19 @@ function SipSettings() {
                     {savedConfig.domain || 'Not set'}
                   </p>
                 </div>
-                
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Complete SIP Address
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900 font-mono bg-blue-50 px-2 py-1 rounded">
+                    {savedConfig.username && savedConfig.domain 
+                      ? `${savedConfig.username}@${savedConfig.domain}`
+                      : 'Not configured'
+                    }
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
                     Password
@@ -492,7 +551,7 @@ function SipSettings() {
                     {savedConfig.password_encrypted ? '••••••••' : 'Not set'}
                   </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
                     Proxy
@@ -501,7 +560,7 @@ function SipSettings() {
                     {savedConfig.proxy || 'Not set'}
                   </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
                     Transport
@@ -510,7 +569,7 @@ function SipSettings() {
                     {savedConfig.transport || 'UDP'}
                   </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
                     Port
@@ -519,7 +578,7 @@ function SipSettings() {
                     {savedConfig.port || '5060'}
                   </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
                     Status
@@ -528,28 +587,16 @@ function SipSettings() {
                     {savedConfig.is_active ? 'Active' : 'Inactive'}
                   </p>
                 </div>
-                
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Last Updated
-                  </label>
-                  <p className="mt-1 text-sm text-gray-900">
-                    {savedConfig.updated_at 
-                      ? new Date(savedConfig.updated_at).toLocaleString()
-                      : 'Never'
-                    }
-                  </p>
-                </div>
               </div>
-              
+
               {savedConfig.last_test_at && (
                 <div className="mt-4 pt-4 border-t border-gray-200">
                   <div className="flex items-center space-x-2">
                     <SafeIcon 
-                      icon={savedConfig.last_test_status === 'success' ? FiCheckCircle : FiAlertCircle}
+                      icon={savedConfig.last_test_status === 'success' ? FiCheckCircle : FiAlertCircle} 
                       className={`h-4 w-4 ${
                         savedConfig.last_test_status === 'success' ? 'text-green-500' : 'text-red-500'
-                      }`}
+                      }`} 
                     />
                     <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
                       Last Test:
@@ -573,6 +620,31 @@ function SipSettings() {
         </div>
       </div>
 
+      {/* Troubleshooting Guide */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <SafeIcon icon={FiInfo} className="h-5 w-5 text-yellow-400" />
+          </div>
+          <div className="ml-3">
+            <h4 className="text-sm font-medium text-yellow-900">
+              Troubleshooting "Busy" Signal
+            </h4>
+            <div className="mt-2 text-sm text-yellow-700">
+              <p className="mb-2">If you're getting a "busy" signal when calling your SIP address:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li><strong>Check Registration:</strong> Ensure SIP monitoring is active and shows "Registered"</li>
+                <li><strong>Verify Credentials:</strong> Double-check your username, domain, and password</li>
+                <li><strong>Test Connection:</strong> Use the "Test Connection" button first</li>
+                <li><strong>Network Issues:</strong> Ensure your network allows SIP traffic on the configured port</li>
+                <li><strong>Provider Settings:</strong> Contact your SIP provider to verify account status</li>
+                <li><strong>Demo Mode:</strong> This demo simulates calls - real SIP calls will show as popups when monitoring is active</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Provider Examples */}
       <div className="bg-gray-50 rounded-lg p-4">
         <h4 className="text-sm font-medium text-gray-900 mb-2">
@@ -580,10 +652,10 @@ function SipSettings() {
         </h4>
         <div className="space-y-2 text-sm text-gray-600">
           <div>
-            <strong>Modulus.gr:</strong> Domain: sip.modulus.gr, Proxy: proxy.modulus.gr
+            <strong>Linphone.org:</strong> Domain: sip.linphone.org, Free accounts available
           </div>
           <div>
-            <strong>Linphone.org:</strong> Domain: sip.linphone.org
+            <strong>Modulus.gr:</strong> Domain: sip.modulus.gr, Proxy: proxy.modulus.gr
           </div>
           <div>
             <strong>FreePBX:</strong> Domain: your-server.com, Port: 5060
@@ -591,7 +663,7 @@ function SipSettings() {
         </div>
       </div>
 
-      {/* SIP Information */}
+      {/* Demo Notice */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex">
           <div className="flex-shrink-0">
@@ -599,34 +671,12 @@ function SipSettings() {
           </div>
           <div className="ml-3">
             <h4 className="text-sm font-medium text-blue-900">
-              How SIP Integration Works
-            </h4>
-            <div className="mt-2 text-sm text-blue-700">
-              <ul className="list-disc list-inside space-y-1">
-                <li>The system registers with your SIP provider to monitor incoming calls</li>
-                <li>When calls arrive, caller ID is extracted and looked up in your database</li>
-                <li>Customer information and addresses are displayed in a popup</li>
-                <li>You can select delivery addresses and log call details</li>
-                <li>All call activity is tracked for reporting and analytics</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Demo Notice */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <SafeIcon icon={FiSettings} className="h-5 w-5 text-yellow-400" />
-          </div>
-          <div className="ml-3">
-            <h4 className="text-sm font-medium text-yellow-900">
               Demo Mode Active
             </h4>
-            <p className="mt-1 text-sm text-yellow-700">
-              This is a demonstration of SIP integration. In production, this would connect to real SIP providers.
+            <p className="mt-1 text-sm text-blue-700">
+              This is a demonstration of SIP integration. In production, this would connect to real SIP providers. 
               Save your SIP configuration first, then click "Start Monitoring" to begin receiving simulated incoming calls.
+              Real calls to your configured SIP address will also appear as popups when monitoring is active.
             </p>
           </div>
         </div>
