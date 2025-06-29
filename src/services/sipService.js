@@ -4,17 +4,27 @@ import { useCallerStore } from '../store/callerStore';
 import { useAuthStore } from '../store/authStore';
 import { callLogsAPI, callersAPI, sipAPI } from './supabaseAPI';
 
+// Import SIP.js for real SIP functionality
+let SIP = null;
+try {
+  SIP = require('sip.js');
+} catch (error) {
+  console.warn('SIP.js not available, using simulation mode');
+}
+
 class SIPService {
   constructor() {
     this.sipConfig = null;
     this.isRegistered = false;
     this.isMonitoring = false;
-    this.callSession = null;
+    this.userAgent = null;
+    this.registerer = null;
+    this.session = null;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.simulationTimer = null;
     this.registrationCheckInterval = null;
-    this.sipUA = null; // For SIP User Agent
+    this.realSipMode = false;
   }
 
   async initialize(companyId) {
@@ -27,8 +37,8 @@ class SIPService {
         return false;
       }
 
-      console.log('SIP Service initialized for company:', companyId);
-      console.log('SIP Config:', {
+      console.log('🚀 SIP Service initialized for company:', companyId);
+      console.log('📋 SIP Config:', {
         username: this.sipConfig.username,
         domain: this.sipConfig.domain,
         proxy: this.sipConfig.proxy,
@@ -36,9 +46,18 @@ class SIPService {
         port: this.sipConfig.port
       });
 
+      // Check if we can use real SIP.js
+      this.realSipMode = !!SIP && this.sipConfig.username && this.sipConfig.domain;
+      
+      if (this.realSipMode) {
+        console.log('🎯 Real SIP mode enabled - will register with actual SIP server');
+      } else {
+        console.log('🎭 Demo mode - SIP.js not available or incomplete config');
+      }
+
       return true;
     } catch (error) {
-      console.error('Failed to initialize SIP service:', error);
+      console.error('❌ Failed to initialize SIP service:', error);
       return false;
     }
   }
@@ -51,55 +70,214 @@ class SIPService {
     try {
       console.log('🚀 Starting SIP monitoring...');
       
-      // In a real implementation, this would use PJSIP or SIP.js
-      // For demo purposes, we'll simulate SIP registration
-      this.isRegistered = await this.registerSIP();
+      if (this.realSipMode) {
+        // Use real SIP registration
+        this.isRegistered = await this.registerRealSIP();
+      } else {
+        // Fallback to simulation
+        this.isRegistered = await this.registerSimulatedSIP();
+      }
       
       if (this.isRegistered) {
         this.isMonitoring = true;
         console.log('✅ SIP monitoring started successfully');
         
-        // Start both simulation and real SIP listening
-        this.startIncomingCallSimulation();
-        this.startRealSIPListening();
+        if (this.realSipMode) {
+          this.startRealSIPListening();
+        } else {
+          this.startIncomingCallSimulation();
+        }
         
         return true;
       }
       
       return false;
     } catch (error) {
-      console.error('Failed to start SIP monitoring:', error);
+      console.error('❌ Failed to start SIP monitoring:', error);
       throw error;
     }
   }
 
-  async registerSIP() {
-    console.log('📞 Registering SIP account...', {
-      username: this.sipConfig.username,
-      domain: this.sipConfig.domain,
-      proxy: this.sipConfig.proxy,
-      transport: this.sipConfig.transport,
-      port: this.sipConfig.port
-    });
+  async registerRealSIP() {
+    if (!SIP || !this.sipConfig.password) {
+      console.log('⚠️ Cannot register real SIP: missing SIP.js or password');
+      return this.registerSimulatedSIP();
+    }
 
+    console.log('🔐 Attempting REAL SIP registration...');
+
+    try {
+      // Create SIP URI
+      const sipUri = `sip:${this.sipConfig.username}@${this.sipConfig.domain}`;
+      const webSocketServer = this.getWebSocketServer();
+      
+      console.log('📞 Connecting to:', sipUri);
+      console.log('🌐 WebSocket Server:', webSocketServer);
+
+      // Create UserAgent configuration
+      const userAgentOptions = {
+        uri: sipUri,
+        transportOptions: {
+          wsServers: [webSocketServer]
+        },
+        authorizationUsername: this.sipConfig.username,
+        authorizationPassword: this.sipConfig.password,
+        displayName: this.sipConfig.username,
+        logBuiltinEnabled: true,
+        logLevel: 'debug'
+      };
+
+      // Create UserAgent
+      this.userAgent = new SIP.UserAgent(userAgentOptions);
+
+      // Set up event handlers
+      this.setupUserAgentEvents();
+
+      // Start the UserAgent
+      await this.userAgent.start();
+
+      // Create and start registerer
+      this.registerer = new SIP.Registerer(this.userAgent);
+      this.setupRegistererEvents();
+
+      // Start registration
+      await this.registerer.register();
+
+      console.log('✅ Real SIP registration initiated');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Real SIP registration failed:', error);
+      console.log('🔄 Falling back to simulation mode');
+      return this.registerSimulatedSIP();
+    }
+  }
+
+  getWebSocketServer() {
+    // Map common SIP domains to their WebSocket servers
+    const domain = this.sipConfig.domain.toLowerCase();
+    
+    if (domain.includes('linphone.org')) {
+      return 'wss://sip.linphone.org:5062';
+    } else if (domain.includes('modulus.gr')) {
+      return 'wss://proxy.modulus.gr:8443';
+    } else {
+      // Default WebSocket server construction
+      const protocol = this.sipConfig.transport === 'TLS' ? 'wss' : 'ws';
+      const port = this.sipConfig.transport === 'TLS' ? 5063 : 5062;
+      return `${protocol}://${this.sipConfig.domain}:${port}`;
+    }
+  }
+
+  setupUserAgentEvents() {
+    if (!this.userAgent) return;
+
+    this.userAgent.delegate = {
+      onConnect: () => {
+        console.log('🔗 SIP UserAgent connected');
+      },
+      onDisconnect: (error) => {
+        console.log('🔌 SIP UserAgent disconnected:', error);
+        if (this.isMonitoring) {
+          this.attemptReconnect();
+        }
+      },
+      onInvite: (invitation) => {
+        console.log('📞 Incoming SIP call invitation received');
+        this.handleRealIncomingCall(invitation);
+      }
+    };
+  }
+
+  setupRegistererEvents() {
+    if (!this.registerer) return;
+
+    this.registerer.delegate = {
+      onRegisterSuccess: () => {
+        console.log('✅ SIP registration successful!');
+        this.isRegistered = true;
+        this.reconnectAttempts = 0;
+        this.updateRegistrationStatus(true);
+      },
+      onRegisterFailure: (error) => {
+        console.error('❌ SIP registration failed:', error);
+        this.isRegistered = false;
+        this.updateRegistrationStatus(false);
+      },
+      onUnregisterSuccess: () => {
+        console.log('📤 SIP unregistration successful');
+        this.isRegistered = false;
+      }
+    };
+  }
+
+  async handleRealIncomingCall(invitation) {
+    console.log('📱 Real incoming SIP call detected!');
+    
+    try {
+      const remoteUri = invitation.remoteIdentity.uri;
+      const callerNumber = this.extractCallerNumber(remoteUri);
+      
+      const sipCallData = {
+        callId: invitation.id,
+        callerNumber: callerNumber,
+        timestamp: new Date().toISOString(),
+        sipHeaders: {
+          'From': remoteUri.toString(),
+          'To': invitation.localIdentity.uri.toString(),
+          'Call-ID': invitation.id,
+          'Contact': remoteUri.toString()
+        },
+        realSipCall: true,
+        invitation: invitation
+      };
+
+      // Handle the incoming call through our existing system
+      await this.handleIncomingCall(sipCallData);
+
+    } catch (error) {
+      console.error('❌ Failed to handle real incoming call:', error);
+    }
+  }
+
+  extractCallerNumber(sipUri) {
+    // Extract phone number from SIP URI
+    // Example: sip:+1234567890@domain.com -> +1234567890
+    try {
+      const userPart = sipUri.user;
+      if (userPart) {
+        // If it looks like a phone number, return it
+        if (/^[\d+]/.test(userPart)) {
+          return userPart.startsWith('+') ? userPart : '+' + userPart;
+        }
+        // Otherwise return the username part
+        return userPart;
+      }
+      return 'Unknown';
+    } catch (error) {
+      console.error('Failed to extract caller number:', error);
+      return 'Unknown';
+    }
+  }
+
+  async registerSimulatedSIP() {
+    console.log('🎭 Using simulated SIP registration...');
+    
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     try {
-      // In a real implementation, this would be actual SIP registration
-      // For now, we'll simulate successful registration
-      
       // Check if the configuration looks valid
       const isValidConfig = this.sipConfig.username && 
                           this.sipConfig.domain && 
-                          this.sipConfig.username.includes('@') === false; // Username shouldn't contain @
+                          this.sipConfig.username.includes('@') === false;
 
       if (!isValidConfig) {
         console.error('❌ Invalid SIP configuration');
         return false;
       }
 
-      console.log('✅ SIP registration successful');
+      console.log('✅ Simulated SIP registration successful');
       console.log(`📍 Registered as: ${this.sipConfig.username}@${this.sipConfig.domain}`);
       
       // Update registration status in database
@@ -107,7 +285,7 @@ class SIPService {
       
       return true;
     } catch (error) {
-      console.error('❌ SIP registration failed:', error);
+      console.error('❌ Simulated SIP registration failed:', error);
       await this.updateRegistrationStatus(false);
       return false;
     }
@@ -121,7 +299,8 @@ class SIPService {
       await sipAPI.updateTestStatus(companyId, {
         last_registration_status: isRegistered ? 'registered' : 'failed',
         last_registration_at: new Date().toISOString(),
-        is_registered: isRegistered
+        is_registered: isRegistered,
+        registration_mode: this.realSipMode ? 'real' : 'simulated'
       });
     } catch (error) {
       console.error('Failed to update registration status:', error);
@@ -129,56 +308,20 @@ class SIPService {
   }
 
   startRealSIPListening() {
-    console.log('🎧 Starting real SIP call listening...');
+    console.log('🎧 Real SIP listening active - waiting for incoming calls...');
     
-    // In a production environment, this would initialize SIP.js or similar
-    // For demonstration, we'll create a more realistic simulation
-    
-    // Simulate periodic registration refresh (every 5 minutes)
+    // Keep the connection alive with periodic registration refresh
     this.registrationCheckInterval = setInterval(() => {
-      if (this.isMonitoring) {
+      if (this.isMonitoring && this.registerer) {
         console.log('🔄 Refreshing SIP registration...');
-        this.refreshRegistration();
+        this.registerer.register().catch(error => {
+          console.error('Registration refresh failed:', error);
+        });
       }
     }, 5 * 60 * 1000); // 5 minutes
 
     console.log('✅ Real SIP listening started');
-    console.log(`📞 Ready to receive calls at: ${this.sipConfig.username}@${this.sipConfig.domain}`);
-  }
-
-  async refreshRegistration() {
-    try {
-      const success = await this.registerSIP();
-      if (success) {
-        console.log('✅ SIP registration refreshed successfully');
-      } else {
-        console.log('❌ SIP registration refresh failed');
-        // Attempt to reconnect
-        this.attemptReconnect();
-      }
-    } catch (error) {
-      console.error('Registration refresh error:', error);
-    }
-  }
-
-  attemptReconnect() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-      console.log(`🔄 Attempting SIP reconnection (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-      
-      setTimeout(async () => {
-        const success = await this.registerSIP();
-        if (success) {
-          this.reconnectAttempts = 0; // Reset on successful reconnection
-          console.log('✅ SIP reconnection successful');
-        } else {
-          this.attemptReconnect(); // Try again
-        }
-      }, 5000 * this.reconnectAttempts); // Exponential backoff
-    } else {
-      console.error('❌ Max reconnection attempts reached. SIP monitoring stopped.');
-      this.stopMonitoring();
-    }
+    console.log(`📞 READY TO RECEIVE REAL CALLS at: ${this.sipConfig.username}@${this.sipConfig.domain}`);
   }
 
   startIncomingCallSimulation() {
@@ -189,11 +332,11 @@ class SIPService {
 
     console.log('🎭 Starting incoming call simulation for demo...');
 
-    // Simulate incoming calls every 20-60 seconds for demo
+    // Simulate incoming calls every 30-60 seconds for demo
     const scheduleNextCall = () => {
       if (!this.isMonitoring) return;
 
-      const delay = Math.random() * 40000 + 20000; // 20-60 seconds
+      const delay = Math.random() * 30000 + 30000; // 30-60 seconds
       this.simulationTimer = setTimeout(() => {
         if (this.isMonitoring) {
           this.simulateIncomingCall();
@@ -202,13 +345,13 @@ class SIPService {
       }, delay);
     };
 
-    // Start the first call after 10 seconds
+    // Start the first call after 15 seconds
     setTimeout(() => {
       if (this.isMonitoring) {
         this.simulateIncomingCall();
         scheduleNextCall();
       }
-    }, 10000);
+    }, 15000);
   }
 
   simulateIncomingCall() {
@@ -216,7 +359,7 @@ class SIPService {
     console.log('📱 Simulating incoming call from:', callerNumber);
     
     this.handleIncomingCall({
-      callId: `sip-call-${Date.now()}`,
+      callId: `sim-call-${Date.now()}`,
       callerNumber: callerNumber,
       timestamp: new Date().toISOString(),
       sipHeaders: {
@@ -224,14 +367,15 @@ class SIPService {
         'To': `sip:${this.sipConfig.username}@${this.sipConfig.domain}`,
         'Call-ID': `call-${Date.now()}@${this.sipConfig.domain}`,
         'Contact': `sip:${callerNumber.replace('+', '')}@${this.sipConfig.domain}:${this.sipConfig.port}`
-      }
+      },
+      realSipCall: false
     });
   }
 
   getRandomCallerNumber() {
     const knownNumbers = ['+1234567890', '+0987654321', '+1122334455'];
     const unknownNumbers = ['+1555000001', '+1555000002', '+1555000003', '+1666777888', '+1777888999'];
-    const greekNumbers = ['+306912345678', '+306987654321', '+306911223344']; // Greek mobile numbers
+    const greekNumbers = ['+306912345678', '+306987654321', '+306911223344'];
     
     const allNumbers = [...knownNumbers, ...unknownNumbers, ...greekNumbers];
     return allNumbers[Math.floor(Math.random() * allNumbers.length)];
@@ -257,7 +401,8 @@ class SIPService {
       console.log('📞 Processing incoming call:', {
         from: callerNumber,
         to: `${this.sipConfig.username}@${this.sipConfig.domain}`,
-        callId: sipCallData.callId
+        callId: sipCallData.callId,
+        real: sipCallData.realSipCall
       });
 
       // Query database for caller
@@ -292,7 +437,8 @@ class SIPService {
       console.log('✅ Incoming call processed:', {
         callerNumber,
         callerFound: !!caller,
-        callLogId: callLog.id
+        callLogId: callLog.id,
+        realCall: sipCallData.realSipCall
       });
 
     } catch (error) {
@@ -326,7 +472,7 @@ class SIPService {
       const now = audioContext.currentTime;
       
       // Ring pattern: two short beeps, pause, repeat
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 4; i++) {
         const startTime = now + (i * 0.8);
         
         // First beep
@@ -341,7 +487,7 @@ class SIPService {
       }
 
       oscillator.start(now);
-      oscillator.stop(now + 2.5);
+      oscillator.stop(now + 3.5);
       
       console.log('🔔 Playing incoming call notification sound');
     } catch (error) {
@@ -352,6 +498,17 @@ class SIPService {
   async answerCall(callLogId) {
     try {
       console.log('✅ Answering call:', callLogId);
+      
+      // If this is a real SIP call, accept the invitation
+      const { incomingCall } = useCallStore.getState();
+      if (incomingCall?.sipCallData?.realSipCall && incomingCall.sipCallData.invitation) {
+        try {
+          await incomingCall.sipCallData.invitation.accept();
+          console.log('📞 Real SIP call accepted');
+        } catch (error) {
+          console.error('Failed to accept real SIP call:', error);
+        }
+      }
       
       // Update call status to answered
       await callLogsAPI.updateStatus(callLogId, 'answered', {
@@ -369,6 +526,17 @@ class SIPService {
   async endCall(callLogId, duration = 0) {
     try {
       console.log('📞 Ending call:', callLogId, 'Duration:', duration);
+      
+      // If this is a real SIP call, end the session
+      const { incomingCall } = useCallStore.getState();
+      if (incomingCall?.sipCallData?.realSipCall && this.session) {
+        try {
+          await this.session.bye();
+          console.log('📞 Real SIP call ended');
+        } catch (error) {
+          console.error('Failed to end real SIP call:', error);
+        }
+      }
       
       // Update call status and duration
       await callLogsAPI.updateStatus(callLogId, 'completed', {
@@ -388,6 +556,17 @@ class SIPService {
     try {
       console.log('📵 Call missed:', callLogId);
       
+      // If this is a real SIP call, reject the invitation
+      const { incomingCall } = useCallStore.getState();
+      if (incomingCall?.sipCallData?.realSipCall && incomingCall.sipCallData.invitation) {
+        try {
+          await incomingCall.sipCallData.invitation.reject();
+          console.log('📵 Real SIP call rejected');
+        } catch (error) {
+          console.error('Failed to reject real SIP call:', error);
+        }
+      }
+      
       // Update call status to missed
       await callLogsAPI.updateStatus(callLogId, 'missed', {
         ended_at: new Date().toISOString()
@@ -401,25 +580,71 @@ class SIPService {
     }
   }
 
+  attemptReconnect() {
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts++;
+      console.log(`🔄 Attempting SIP reconnection (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+      
+      setTimeout(async () => {
+        try {
+          if (this.realSipMode) {
+            await this.registerRealSIP();
+          } else {
+            await this.registerSimulatedSIP();
+          }
+          
+          if (this.isRegistered) {
+            this.reconnectAttempts = 0;
+            console.log('✅ SIP reconnection successful');
+          } else {
+            this.attemptReconnect();
+          }
+        } catch (error) {
+          console.error('Reconnection attempt failed:', error);
+          this.attemptReconnect();
+        }
+      }, 5000 * this.reconnectAttempts);
+    } else {
+      console.error('❌ Max reconnection attempts reached. SIP monitoring stopped.');
+      this.stopMonitoring();
+    }
+  }
+
   stopMonitoring() {
     console.log('🛑 Stopping SIP monitoring...');
     
     this.isMonitoring = false;
     this.isRegistered = false;
 
-    // Clear simulation timer
+    // Unregister from real SIP server
+    if (this.registerer) {
+      this.registerer.unregister().catch(error => {
+        console.error('Failed to unregister:', error);
+      });
+    }
+
+    // Stop UserAgent
+    if (this.userAgent) {
+      this.userAgent.stop().catch(error => {
+        console.error('Failed to stop UserAgent:', error);
+      });
+    }
+
+    // Clear timers
     if (this.simulationTimer) {
       clearTimeout(this.simulationTimer);
       this.simulationTimer = null;
     }
 
-    // Clear registration check interval
     if (this.registrationCheckInterval) {
       clearInterval(this.registrationCheckInterval);
       this.registrationCheckInterval = null;
     }
 
-    // Reset reconnection attempts
+    // Reset objects
+    this.userAgent = null;
+    this.registerer = null;
+    this.session = null;
     this.reconnectAttempts = 0;
 
     console.log('✅ SIP monitoring stopped');
@@ -433,10 +658,12 @@ class SIPService {
     return {
       isRegistered: this.isRegistered,
       isMonitoring: this.isMonitoring,
+      realSipMode: this.realSipMode,
       config: this.sipConfig ? {
         username: this.sipConfig.username,
         domain: this.sipConfig.domain,
-        registered_as: `${this.sipConfig.username}@${this.sipConfig.domain}`
+        registered_as: `${this.sipConfig.username}@${this.sipConfig.domain}`,
+        mode: this.realSipMode ? 'Real SIP' : 'Demo Mode'
       } : null
     };
   }
@@ -445,23 +672,36 @@ class SIPService {
     try {
       console.log('🧪 Testing SIP connection...');
       
-      const success = await this.registerSIP();
+      let success = false;
+      let message = '';
+      
+      if (this.realSipMode) {
+        success = await this.registerRealSIP();
+        message = success 
+          ? `Real SIP connection successful! Registered as: ${this.sipConfig.username}@${this.sipConfig.domain}` 
+          : 'Real SIP connection failed. Check credentials and network.';
+      } else {
+        success = await this.registerSimulatedSIP();
+        message = success 
+          ? `Demo SIP connection successful. Simulated as: ${this.sipConfig.username}@${this.sipConfig.domain}` 
+          : 'SIP configuration test failed.';
+      }
       
       // Update test status in database
       if (this.sipConfig) {
         const companyId = useAuthStore.getState().getUserCompanyId();
         await sipAPI.updateTestStatus(companyId, {
           last_test_status: success ? 'success' : 'failed',
-          last_test_at: new Date().toISOString()
+          last_test_at: new Date().toISOString(),
+          test_mode: this.realSipMode ? 'real' : 'simulated'
         });
       }
 
       const result = {
         success,
-        message: success 
-          ? `SIP connection test successful. Registered as: ${this.sipConfig.username}@${this.sipConfig.domain}` 
-          : 'SIP connection test failed. Check your credentials and network connectivity.',
-        tested_at: new Date().toISOString()
+        message,
+        tested_at: new Date().toISOString(),
+        realSip: this.realSipMode
       };
 
       console.log(success ? '✅' : '❌', 'SIP test result:', result.message);
@@ -472,14 +712,16 @@ class SIPService {
       if (this.sipConfig && companyId) {
         await sipAPI.updateTestStatus(companyId, {
           last_test_status: 'failed',
-          last_test_at: new Date().toISOString()
+          last_test_at: new Date().toISOString(),
+          test_error: error.message
         });
       }
 
       return {
         success: false,
-        message: error.message,
-        tested_at: new Date().toISOString()
+        message: error.message || 'SIP connection test failed',
+        tested_at: new Date().toISOString(),
+        realSip: this.realSipMode
       };
     }
   }
@@ -499,6 +741,12 @@ if (typeof window !== 'undefined') {
           if (success) {
             console.log('🚀 SIP service auto-initialized');
             console.log('📞 Ready to receive calls at your configured SIP address');
+            
+            if (sipService.realSipMode) {
+              console.log('🎯 Real SIP mode active - will register with actual SIP server');
+            } else {
+              console.log('🎭 Demo mode active - install SIP.js for real functionality');
+            }
           }
         })
         .catch(error => {

@@ -8,7 +8,7 @@ import { useAuthStore } from '../../store/authStore';
 import { sipAPI } from '../../services/supabaseAPI';
 import { sipService } from '../../services/sipService';
 
-const { FiPhone, FiServer, FiLock, FiSettings, FiPlay, FiStop, FiCheckCircle, FiAlertCircle, FiGlobe, FiShield, FiEye, FiDatabase, FiInfo } = FiIcons;
+const { FiPhone, FiServer, FiLock, FiSettings, FiPlay, FiStop, FiCheckCircle, FiAlertCircle, FiGlobe, FiShield, FiEye, FiDatabase, FiInfo, FiWifi } = FiIcons;
 
 function SipSettings() {
   const [isLoading, setIsLoading] = useState(false);
@@ -62,7 +62,8 @@ function SipSettings() {
             message: config.last_test_status === 'success' 
               ? 'Last test was successful' 
               : 'Last test failed',
-            tested_at: config.last_test_at
+            tested_at: config.last_test_at,
+            realSip: config.test_mode === 'real'
           });
         }
       }
@@ -160,7 +161,8 @@ function SipSettings() {
       setConnectionStatus(result);
 
       if (result.success) {
-        toast.success('SIP connection test successful', { duration: 2000 });
+        const mode = result.realSip ? 'Real SIP' : 'Demo Mode';
+        toast.success(`SIP connection test successful (${mode})`, { duration: 2000 });
         
         // Update registration status
         const regStatus = sipService.getRegistrationStatus();
@@ -173,7 +175,8 @@ function SipSettings() {
       setConnectionStatus({
         success: false,
         message: error.message || 'SIP connection test failed',
-        tested_at: new Date().toISOString()
+        tested_at: new Date().toISOString(),
+        realSip: false
       });
       toast.error('SIP connection test failed');
     } finally {
@@ -205,8 +208,11 @@ function SipSettings() {
         
         if (success) {
           setIsMonitoring(true);
-          setRegistrationStatus(sipService.getRegistrationStatus());
-          toast.success('SIP monitoring started - incoming calls will appear as popups', { duration: 3000 });
+          const regStatus = sipService.getRegistrationStatus();
+          setRegistrationStatus(regStatus);
+          
+          const mode = regStatus.realSipMode ? 'Real SIP' : 'Demo';
+          toast.success(`SIP monitoring started (${mode}) - incoming calls will appear as popups`, { duration: 3000 });
         } else {
           toast.error('Failed to start SIP monitoring - check your configuration');
         }
@@ -238,6 +244,9 @@ function SipSettings() {
                   isMonitoring ? 'bg-green-500' : 'bg-gray-400'
                 }`}></div>
                 <span>{isMonitoring ? 'Monitoring Active' : 'Monitoring Stopped'}</span>
+                {registrationStatus?.realSipMode && (
+                  <SafeIcon icon={FiWifi} className="w-3 h-3 text-green-600" title="Real SIP Mode" />
+                )}
               </div>
 
               <button
@@ -256,10 +265,16 @@ function SipSettings() {
 
           {/* Registration Status */}
           {registrationStatus && registrationStatus.config && (
-            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className={`mb-6 border rounded-lg p-4 ${
+              registrationStatus.realSipMode 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-blue-50 border-blue-200'
+            }`}>
               <div className="flex items-center space-x-2">
-                <SafeIcon icon={FiPhone} className="h-5 w-5 text-blue-600" />
-                <h4 className="text-sm font-medium text-blue-900">SIP Registration Status</h4>
+                <SafeIcon icon={registrationStatus.realSipMode ? FiWifi : FiPhone} className="h-5 w-5 text-blue-600" />
+                <h4 className="text-sm font-medium text-blue-900">
+                  SIP Registration Status ({registrationStatus.config.mode})
+                </h4>
               </div>
               <div className="mt-2 space-y-1">
                 <p className="text-sm text-blue-700">
@@ -271,11 +286,43 @@ function SipSettings() {
                     {registrationStatus.isRegistered ? '✅ Registered' : '❌ Not Registered'}
                   </span>
                 </p>
+                <p className="text-sm text-blue-700">
+                  <strong>Mode:</strong> 
+                  <span className={`ml-1 font-medium ${
+                    registrationStatus.realSipMode ? 'text-green-600' : 'text-orange-600'
+                  }`}>
+                    {registrationStatus.realSipMode ? '🌐 Real SIP Registration' : '🎭 Demo Simulation'}
+                  </span>
+                </p>
                 {registrationStatus.isRegistered && (
                   <p className="text-xs text-blue-600 mt-2">
                     📞 Ready to receive calls! You can now call: <strong>{registrationStatus.config.registered_as}</strong>
+                    {registrationStatus.realSipMode && (
+                      <span className="block text-green-600 font-medium mt-1">
+                        🎯 Real SIP mode: Calls to this address will appear as popups!
+                      </span>
+                    )}
                   </p>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* SIP.js Installation Notice */}
+          {registrationStatus && !registrationStatus.realSipMode && (
+            <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex">
+                <SafeIcon icon={FiInfo} className="h-5 w-5 text-yellow-400" />
+                <div className="ml-3">
+                  <h4 className="text-sm font-medium text-yellow-900">
+                    Demo Mode Active
+                  </h4>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    Currently running in demo mode. For real SIP functionality that actually registers with 
+                    {savedConfig?.domain && ` ${savedConfig.domain}`}, ensure SIP.js is properly installed. 
+                    Real calls would then appear as popups when monitoring is active.
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -358,23 +405,31 @@ function SipSettings() {
                 {/* SIP Password */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    SIP Password
+                    SIP Password *
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <SafeIcon icon={FiLock} className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
-                      {...register('password')}
+                      {...register('password', {
+                        required: hasRole('admin') && !savedConfig?.password_encrypted ? 'Password is required for new accounts' : false
+                      })}
                       type="password"
                       disabled={!hasRole('admin')}
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
-                      placeholder={hasRole('admin') ? "Enter new password (leave blank to keep current)" : "Hidden"}
+                      placeholder={hasRole('admin') ? "Enter SIP password" : "Hidden"}
                     />
                   </div>
+                  {errors.password && (
+                    <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+                  )}
                   {hasRole('admin') && (
                     <p className="mt-1 text-xs text-gray-500">
-                      Leave blank to keep current password. Enter new password to update.
+                      {savedConfig?.password_encrypted 
+                        ? 'Leave blank to keep current password. Enter new password to update.' 
+                        : 'Required for real SIP registration'
+                      }
                     </p>
                   )}
                 </div>
@@ -464,6 +519,7 @@ function SipSettings() {
                           connectionStatus.success ? 'text-green-600' : 'text-red-600'
                         }`}>
                           Last tested: {new Date(connectionStatus.tested_at).toLocaleString()}
+                          {connectionStatus.realSip && <span className="ml-2 font-medium">(Real SIP)</span>}
                         </p>
                       )}
                     </div>
@@ -633,12 +689,12 @@ function SipSettings() {
             <div className="mt-2 text-sm text-yellow-700">
               <p className="mb-2">If you're getting a "busy" signal when calling your SIP address:</p>
               <ul className="list-disc list-inside space-y-1">
-                <li><strong>Check Registration:</strong> Ensure SIP monitoring is active and shows "Registered"</li>
-                <li><strong>Verify Credentials:</strong> Double-check your username, domain, and password</li>
-                <li><strong>Test Connection:</strong> Use the "Test Connection" button first</li>
-                <li><strong>Network Issues:</strong> Ensure your network allows SIP traffic on the configured port</li>
-                <li><strong>Provider Settings:</strong> Contact your SIP provider to verify account status</li>
-                <li><strong>Demo Mode:</strong> This demo simulates calls - real SIP calls will show as popups when monitoring is active</li>
+                <li><strong>Real SIP Mode:</strong> Ensure SIP.js is installed and password is provided</li>
+                <li><strong>Check Registration:</strong> Ensure SIP monitoring shows "Real SIP Registration"</li>
+                <li><strong>Verify Credentials:</strong> Double-check username, domain, and password</li>
+                <li><strong>Network Issues:</strong> Browser may block WebSocket connections to SIP servers</li>
+                <li><strong>Provider Support:</strong> Not all SIP providers support WebRTC/WebSocket connections</li>
+                <li><strong>Demo Mode:</strong> If real SIP fails, demo mode will simulate incoming calls</li>
               </ul>
             </div>
           </div>
@@ -648,22 +704,22 @@ function SipSettings() {
       {/* Provider Examples */}
       <div className="bg-gray-50 rounded-lg p-4">
         <h4 className="text-sm font-medium text-gray-900 mb-2">
-          Popular SIP Providers
+          Popular SIP Providers (WebRTC Support)
         </h4>
         <div className="space-y-2 text-sm text-gray-600">
           <div>
-            <strong>Linphone.org:</strong> Domain: sip.linphone.org, Free accounts available
+            <strong>Linphone.org:</strong> Domain: sip.linphone.org, WebSocket: wss://sip.linphone.org:5062
           </div>
           <div>
-            <strong>Modulus.gr:</strong> Domain: sip.modulus.gr, Proxy: proxy.modulus.gr
+            <strong>Modulus.gr:</strong> Domain: sip.modulus.gr, WebSocket: wss://proxy.modulus.gr:8443
           </div>
           <div>
-            <strong>FreePBX:</strong> Domain: your-server.com, Port: 5060
+            <strong>Note:</strong> WebRTC requires WebSocket support from your SIP provider
           </div>
         </div>
       </div>
 
-      {/* Demo Notice */}
+      {/* Integration Status */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex">
           <div className="flex-shrink-0">
@@ -671,12 +727,14 @@ function SipSettings() {
           </div>
           <div className="ml-3">
             <h4 className="text-sm font-medium text-blue-900">
-              Demo Mode Active
+              SIP.js Integration Status
             </h4>
             <p className="mt-1 text-sm text-blue-700">
-              This is a demonstration of SIP integration. In production, this would connect to real SIP providers. 
-              Save your SIP configuration first, then click "Start Monitoring" to begin receiving simulated incoming calls.
-              Real calls to your configured SIP address will also appear as popups when monitoring is active.
+              {registrationStatus?.realSipMode 
+                ? '🎯 SIP.js is installed and active. Real SIP registration will be attempted.'
+                : '🎭 SIP.js not available or incomplete configuration. Running in demo mode with simulated calls.'
+              }
+              {' '}Save your complete SIP configuration including password, then start monitoring to begin receiving calls.
             </p>
           </div>
         </div>
