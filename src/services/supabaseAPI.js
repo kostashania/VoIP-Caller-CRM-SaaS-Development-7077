@@ -5,78 +5,51 @@ import toast from 'react-hot-toast';
 const handleSupabaseError = (error, operation = 'Operation') => {
   console.error(`${operation} failed:`, error);
   const message = error.message || `${operation} failed`;
-  toast.error(message);
   throw new Error(message);
 };
 
 // Auth API
 export const authAPI = {
-  login: async (email, password) => {
+  login: async (email, password = 'demo') => {
     try {
-      // For demo purposes, we'll simulate login by checking user table
-      const { data: user, error } = await supabase
-        .from('users_voipcrm_2024')
+      // Get user from database
+      const { data: userData, error: userError } = await supabase
+        .from('users_crm_8x9p2k')
         .select(`
           *,
-          company:companies_voipcrm_2024(*)
+          company:companies_crm_8x9p2k(*)
         `)
         .eq('email', email)
         .eq('is_active', true)
         .single();
 
-      if (error) {
-        console.error('Login query error:', error);
-        if (error.code === 'PGRST116') {
-          throw new Error('Invalid email address. Please check the demo credentials.');
-        }
-        throw new Error('Login failed. Please try again.');
+      if (userError || !userData) {
+        throw new Error('Invalid email address. User not found.');
       }
 
-      if (!user) {
-        throw new Error('Invalid credentials');
-      }
+      console.log('Login successful for user:', userData);
 
-      console.log('Login successful for user:', user);
+      // Simulate delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // In production, use Supabase Auth
       return {
         user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          company_id: user.company_id,
-          company: user.company
+          id: userData.id,
+          email: userData.email,
+          name: userData.name,
+          role: userData.role,
+          company_id: userData.company_id,
+          company: userData.company
         },
-        token: `demo-token-${user.id}`
+        token: `supabase-token-${userData.id}`
       };
     } catch (error) {
-      if (error.message.includes('Invalid email address') || error.message.includes('Invalid credentials')) {
-        throw error;
-      }
       handleSupabaseError(error, 'Login');
     }
   },
 
   register: async (userData) => {
-    try {
-      // In production, use Supabase Auth and then create user record
-      const { data, error } = await supabase
-        .from('users_voipcrm_2024')
-        .insert([{
-          email: userData.email,
-          name: userData.name,
-          role: 'admin', // New registrations are company admins
-          company_id: null // Will be set when company is created
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      handleSupabaseError(error, 'Registration');
-    }
+    throw new Error('Registration is not available in demo mode');
   }
 };
 
@@ -85,31 +58,32 @@ export const companiesAPI = {
   getAll: async () => {
     try {
       const { data, error } = await supabase
-        .from('companies_voipcrm_2024')
+        .from('companies_crm_8x9p2k')
         .select(`
           *,
-          voip_settings:voip_settings_voipcrm_2024(*),
-          user_count:users_voipcrm_2024(count)
+          voip_settings:voip_settings_crm_8x9p2k(*),
+          user_count:users_crm_8x9p2k(count)
         `)
+        .eq('is_active', true)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data;
+      return data || [];
     } catch (error) {
-      handleSupabaseError(error, 'Fetch companies');
+      handleSupabaseError(error, 'Get companies');
     }
   },
 
   create: async (companyData) => {
     try {
-      // Start transaction
+      // Create company
       const { data: company, error: companyError } = await supabase
-        .from('companies_voipcrm_2024')
-        .insert([{
+        .from('companies_crm_8x9p2k')
+        .insert({
           name: companyData.name,
           subscription_start: companyData.subscriptionStart,
           subscription_end: companyData.subscriptionEnd
-        }])
+        })
         .select()
         .single();
 
@@ -117,27 +91,17 @@ export const companiesAPI = {
 
       // Create admin user
       const { data: adminUser, error: userError } = await supabase
-        .from('users_voipcrm_2024')
-        .insert([{
-          company_id: company.id,
+        .from('users_crm_8x9p2k')
+        .insert({
           email: companyData.adminEmail,
           name: companyData.adminName,
-          role: 'admin'
-        }])
+          role: 'admin',
+          company_id: company.id
+        })
         .select()
         .single();
 
       if (userError) throw userError;
-
-      // Create default VoIP settings
-      const { error: voipError } = await supabase
-        .from('voip_settings_voipcrm_2024')
-        .insert([{
-          company_id: company.id,
-          protocol: 'SIP'
-        }]);
-
-      if (voipError) throw voipError;
 
       return { company, adminUser };
     } catch (error) {
@@ -148,7 +112,7 @@ export const companiesAPI = {
   update: async (id, companyData) => {
     try {
       const { data, error } = await supabase
-        .from('companies_voipcrm_2024')
+        .from('companies_crm_8x9p2k')
         .update(companyData)
         .eq('id', id)
         .select()
@@ -164,8 +128,8 @@ export const companiesAPI = {
   delete: async (id) => {
     try {
       const { error } = await supabase
-        .from('companies_voipcrm_2024')
-        .delete()
+        .from('companies_crm_8x9p2k')
+        .update({ is_active: false })
         .eq('id', id);
 
       if (error) throw error;
@@ -180,22 +144,22 @@ export const voipAPI = {
   getSettings: async (companyId) => {
     try {
       const { data, error } = await supabase
-        .from('voip_settings_voipcrm_2024')
+        .from('voip_settings_crm_8x9p2k')
         .select('*')
         .eq('company_id', companyId)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error; // Ignore "not found" error
-      return data;
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows returned
+      return data || null;
     } catch (error) {
-      handleSupabaseError(error, 'Fetch VoIP settings');
+      handleSupabaseError(error, 'Get VoIP settings');
     }
   },
 
   updateSettings: async (companyId, settings) => {
     try {
       const { data, error } = await supabase
-        .from('voip_settings_voipcrm_2024')
+        .from('voip_settings_crm_8x9p2k')
         .upsert({
           company_id: companyId,
           ...settings,
@@ -213,7 +177,7 @@ export const voipAPI = {
 
   testConnection: async (companyId, settings) => {
     try {
-      // Mock test - in production, make actual API call to VoIP service
+      // Simulate connection test
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       const success = Math.random() > 0.3;
@@ -225,12 +189,13 @@ export const voipAPI = {
 
       // Update test results
       await supabase
-        .from('voip_settings_voipcrm_2024')
-        .update({
+        .from('voip_settings_crm_8x9p2k')
+        .upsert({
+          company_id: companyId,
+          last_test_status: result.success ? 'success' : 'failed',
           last_test_at: result.tested_at,
-          last_test_status: result.success ? 'success' : 'failed'
-        })
-        .eq('company_id', companyId);
+          updated_at: new Date().toISOString()
+        });
 
       return result;
     } catch (error) {
@@ -244,34 +209,34 @@ export const usersAPI = {
   getAll: async (companyId) => {
     try {
       let query = supabase
-        .from('users_voipcrm_2024')
+        .from('users_crm_8x9p2k')
         .select(`
           *,
-          company:companies_voipcrm_2024(name)
+          company:companies_crm_8x9p2k(*)
         `)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .eq('is_active', true);
 
       if (companyId) {
         query = query.eq('company_id', companyId);
       }
 
-      const { data, error } = await query;
+      const { data, error } = await query.order('created_at', { ascending: false });
+
       if (error) throw error;
-      return data;
+      return data || [];
     } catch (error) {
-      handleSupabaseError(error, 'Fetch users');
+      handleSupabaseError(error, 'Get users');
     }
   },
 
   create: async (userData) => {
     try {
       const { data, error } = await supabase
-        .from('users_voipcrm_2024')
-        .insert([userData])
+        .from('users_crm_8x9p2k')
+        .insert(userData)
         .select(`
           *,
-          company:companies_voipcrm_2024(name)
+          company:companies_crm_8x9p2k(*)
         `)
         .single();
 
@@ -285,16 +250,10 @@ export const usersAPI = {
   update: async (id, userData) => {
     try {
       const { data, error } = await supabase
-        .from('users_voipcrm_2024')
-        .update({
-          ...userData,
-          updated_at: new Date().toISOString()
-        })
+        .from('users_crm_8x9p2k')
+        .update({ ...userData, updated_at: new Date().toISOString() })
         .eq('id', id)
-        .select(`
-          *,
-          company:companies_voipcrm_2024(name)
-        `)
+        .select()
         .single();
 
       if (error) throw error;
@@ -307,7 +266,7 @@ export const usersAPI = {
   delete: async (id) => {
     try {
       const { error } = await supabase
-        .from('users_voipcrm_2024')
+        .from('users_crm_8x9p2k')
         .update({ is_active: false })
         .eq('id', id);
 
@@ -323,10 +282,10 @@ export const callersAPI = {
   getAll: async (companyId) => {
     try {
       const { data, error } = await supabase
-        .from('callers_voipcrm_2024')
+        .from('callers_crm_8x9p2k')
         .select(`
           *,
-          addresses:caller_addresses_voipcrm_2024(*)
+          addresses:addresses_crm_8x9p2k(*)
         `)
         .eq('company_id', companyId)
         .eq('is_active', true)
@@ -335,17 +294,17 @@ export const callersAPI = {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      handleSupabaseError(error, 'Fetch callers');
+      handleSupabaseError(error, 'Get callers');
     }
   },
 
   getById: async (id) => {
     try {
       const { data, error } = await supabase
-        .from('callers_voipcrm_2024')
+        .from('callers_crm_8x9p2k')
         .select(`
           *,
-          addresses:caller_addresses_voipcrm_2024(*)
+          addresses:addresses_crm_8x9p2k(*)
         `)
         .eq('id', id)
         .eq('is_active', true)
@@ -354,38 +313,38 @@ export const callersAPI = {
       if (error) throw error;
       return data;
     } catch (error) {
-      handleSupabaseError(error, 'Fetch caller');
+      handleSupabaseError(error, 'Get caller by ID');
     }
   },
 
   getByPhone: async (companyId, phoneNumber) => {
     try {
       const { data, error } = await supabase
-        .from('callers_voipcrm_2024')
+        .from('callers_crm_8x9p2k')
         .select(`
           *,
-          addresses:caller_addresses_voipcrm_2024(*)
+          addresses:addresses_crm_8x9p2k(*)
         `)
         .eq('company_id', companyId)
         .eq('phone_number', phoneNumber)
         .eq('is_active', true)
-        .maybeSingle();
+        .single();
 
-      if (error) throw error;
-      return data;
+      if (error && error.code !== 'PGRST116') throw error;
+      return data || null;
     } catch (error) {
-      handleSupabaseError(error, 'Fetch caller by phone');
+      handleSupabaseError(error, 'Get caller by phone');
     }
   },
 
   create: async (callerData) => {
     try {
       const { data, error } = await supabase
-        .from('callers_voipcrm_2024')
-        .insert([callerData])
+        .from('callers_crm_8x9p2k')
+        .insert(callerData)
         .select(`
           *,
-          addresses:caller_addresses_voipcrm_2024(*)
+          addresses:addresses_crm_8x9p2k(*)
         `)
         .single();
 
@@ -399,15 +358,12 @@ export const callersAPI = {
   update: async (id, callerData) => {
     try {
       const { data, error } = await supabase
-        .from('callers_voipcrm_2024')
-        .update({
-          ...callerData,
-          updated_at: new Date().toISOString()
-        })
+        .from('callers_crm_8x9p2k')
+        .update({ ...callerData, updated_at: new Date().toISOString() })
         .eq('id', id)
         .select(`
           *,
-          addresses:caller_addresses_voipcrm_2024(*)
+          addresses:addresses_crm_8x9p2k(*)
         `)
         .single();
 
@@ -421,7 +377,7 @@ export const callersAPI = {
   delete: async (id) => {
     try {
       const { error } = await supabase
-        .from('callers_voipcrm_2024')
+        .from('callers_crm_8x9p2k')
         .update({ is_active: false })
         .eq('id', id);
 
@@ -437,11 +393,8 @@ export const addressesAPI = {
   create: async (addressData) => {
     try {
       const { data, error } = await supabase
-        .from('caller_addresses_voipcrm_2024')
-        .insert([{
-          ...addressData,
-          label: addressData.label || 'Home' // Default to 'Home'
-        }])
+        .from('addresses_crm_8x9p2k')
+        .insert(addressData)
         .select()
         .single();
 
@@ -455,11 +408,8 @@ export const addressesAPI = {
   update: async (id, addressData) => {
     try {
       const { data, error } = await supabase
-        .from('caller_addresses_voipcrm_2024')
-        .update({
-          ...addressData,
-          updated_at: new Date().toISOString()
-        })
+        .from('addresses_crm_8x9p2k')
+        .update(addressData)
         .eq('id', id)
         .select()
         .single();
@@ -474,7 +424,7 @@ export const addressesAPI = {
   delete: async (id) => {
     try {
       const { error } = await supabase
-        .from('caller_addresses_voipcrm_2024')
+        .from('addresses_crm_8x9p2k')
         .delete()
         .eq('id', id);
 
@@ -490,16 +440,15 @@ export const callsAPI = {
   getAll: async (companyId, filters = {}) => {
     try {
       let query = supabase
-        .from('calls_voipcrm_2024')
+        .from('calls_crm_8x9p2k')
         .select(`
           *,
-          caller:callers_voipcrm_2024(
+          caller:callers_crm_8x9p2k(
             *,
-            addresses:caller_addresses_voipcrm_2024(*)
+            addresses:addresses_crm_8x9p2k(*)
           )
         `)
-        .eq('company_id', companyId)
-        .order('timestamp', { ascending: false });
+        .eq('company_id', companyId);
 
       // Apply filters
       if (filters.status) {
@@ -512,24 +461,25 @@ export const callsAPI = {
         query = query.lte('timestamp', filters.to_date);
       }
 
-      const { data, error } = await query;
+      const { data, error } = await query.order('timestamp', { ascending: false });
+
       if (error) throw error;
       return data || [];
     } catch (error) {
-      handleSupabaseError(error, 'Fetch calls');
+      handleSupabaseError(error, 'Get calls');
     }
   },
 
   create: async (callData) => {
     try {
       const { data, error } = await supabase
-        .from('calls_voipcrm_2024')
-        .insert([callData])
+        .from('calls_crm_8x9p2k')
+        .insert(callData)
         .select(`
           *,
-          caller:callers_voipcrm_2024(
+          caller:callers_crm_8x9p2k(
             *,
-            addresses:caller_addresses_voipcrm_2024(*)
+            addresses:addresses_crm_8x9p2k(*)
           )
         `)
         .single();
@@ -544,18 +494,14 @@ export const callsAPI = {
   updateStatus: async (id, status, metadata = {}) => {
     try {
       const { data, error } = await supabase
-        .from('calls_voipcrm_2024')
-        .update({
-          call_status: status,
-          ...metadata,
-          updated_at: new Date().toISOString()
-        })
+        .from('calls_crm_8x9p2k')
+        .update({ call_status: status, ...metadata })
         .eq('id', id)
         .select(`
           *,
-          caller:callers_voipcrm_2024(
+          caller:callers_crm_8x9p2k(
             *,
-            addresses:caller_addresses_voipcrm_2024(*)
+            addresses:addresses_crm_8x9p2k(*)
           )
         `)
         .single();

@@ -19,7 +19,6 @@ class WebSocketService {
       
       // Mock incoming calls for demo
       this.simulateIncomingCalls();
-      
     } catch (error) {
       console.error('WebSocket connection failed:', error);
       this.scheduleReconnect();
@@ -49,14 +48,14 @@ class WebSocketService {
     const { setIncomingCall, addCall } = useCallStore.getState();
     const { getCallerByPhone } = useCallerStore.getState();
     const { getUserCompanyId } = useAuthStore.getState();
-    
+
     const companyId = getUserCompanyId();
     if (!companyId) return;
 
     try {
       // Check if caller exists in the database
       const caller = await callersAPI.getByPhone(companyId, callData.caller_number);
-      
+
       // Create call record in database
       const newCall = await callsAPI.create({
         company_id: companyId,
@@ -69,7 +68,7 @@ class WebSocketService {
 
       // Add caller info to call object
       newCall.caller = caller;
-      
+
       // Update local state
       addCall(newCall);
       setIncomingCall(newCall);
