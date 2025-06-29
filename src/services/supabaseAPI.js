@@ -72,14 +72,20 @@ export const authAPI = {
 export const sipAPI = {
   getConfig: async (companyId) => {
     try {
+      console.log('Getting SIP config for company:', companyId);
+      
       const { data, error } = await supabase
         .from('sip_configurations_crm_8x9p2k')
         .select('*')
         .eq('company_id', companyId)
-        .eq('is_active', true)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to avoid error when no record exists
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error) {
+        console.error('Error getting SIP config:', error);
+        throw error;
+      }
+
+      console.log('SIP config retrieved:', data);
 
       if (data && data.password_encrypted) {
         // Decrypt password for use (in production, handle this securely)
@@ -88,12 +94,15 @@ export const sipAPI = {
 
       return data || null;
     } catch (error) {
-      handleSupabaseError(error, 'Get SIP configuration');
+      console.error('Failed to get SIP config:', error);
+      return null; // Return null instead of throwing to prevent breaking the UI
     }
   },
 
   updateConfig: async (companyId, config) => {
     try {
+      console.log('Updating SIP config for company:', companyId, 'with data:', config);
+      
       // Prepare config for storage
       const configToStore = { ...config };
       
@@ -105,52 +114,80 @@ export const sipAPI = {
       } else {
         // If no password provided, don't update the password field
         delete configToStore.password;
+        delete configToStore.password_encrypted; // Don't overwrite existing encrypted password
         console.log('No password provided, keeping existing password');
       }
 
       // Check if record exists
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('sip_configurations_crm_8x9p2k')
-        .select('id')
+        .select('id, password_encrypted')
         .eq('company_id', companyId)
-        .single();
+        .maybeSingle();
+
+      if (existingError) {
+        console.error('Error checking existing config:', existingError);
+        throw existingError;
+      }
 
       let result;
       if (existing) {
         // Update existing record
+        const updateData = {
+          ...configToStore,
+          updated_at: new Date().toISOString()
+        };
+
+        // If no new password provided, keep the existing encrypted password
+        if (!config.password && existing.password_encrypted) {
+          updateData.password_encrypted = existing.password_encrypted;
+        }
+
+        console.log('Updating existing SIP config with:', updateData);
+
         const { data, error } = await supabase
           .from('sip_configurations_crm_8x9p2k')
-          .update({
-            ...configToStore,
-            updated_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('company_id', companyId)
           .select()
           .single();
         
-        if (error) throw error;
+        if (error) {
+          console.error('Error updating SIP config:', error);
+          throw error;
+        }
+        
         result = data;
-        console.log('SIP config updated:', result);
+        console.log('SIP config updated successfully:', result);
       } else {
         // Insert new record
+        const insertData = {
+          company_id: companyId,
+          ...configToStore,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        console.log('Creating new SIP config with:', insertData);
+
         const { data, error } = await supabase
           .from('sip_configurations_crm_8x9p2k')
-          .insert({
-            company_id: companyId,
-            ...configToStore,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
+          .insert(insertData)
           .select()
           .single();
         
-        if (error) throw error;
+        if (error) {
+          console.error('Error creating SIP config:', error);
+          throw error;
+        }
+        
         result = data;
-        console.log('SIP config created:', result);
+        console.log('SIP config created successfully:', result);
       }
 
       return result;
     } catch (error) {
+      console.error('Failed to update SIP config:', error);
       handleSupabaseError(error, 'Update SIP configuration');
     }
   },
