@@ -5,31 +5,54 @@ import toast from 'react-hot-toast';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { useCallerStore } from '../../store/callerStore';
+import { useAuthStore } from '../../store/authStore';
+import { callersAPI, addressesAPI } from '../../services/supabaseAPI';
 
 const { FiX, FiUser, FiPhone, FiFileText } = FiIcons;
 
 function AddCallerModal({ isOpen, onClose }) {
   const { addCaller } = useCallerStore();
+  const { getUserCompanyId } = useAuthStore();
   const { register, handleSubmit, formState: { errors }, reset } = useForm();
 
   const onSubmit = async (data) => {
     try {
-      // Mock API call
-      const newCaller = {
-        id: Date.now(), // Mock ID
-        company_id: 1, // Mock company ID
+      const companyId = getUserCompanyId();
+      if (!companyId) {
+        throw new Error('No company ID found');
+      }
+
+      // Create caller
+      const newCaller = await callersAPI.create({
+        company_id: companyId,
         phone_number: data.phoneNumber,
         name: data.name,
-        global_note: data.note || '',
-        addresses: []
-      };
+        global_note: data.note || ''
+      });
 
-      addCaller(newCaller);
+      // Create default address if provided
+      if (data.address) {
+        await addressesAPI.create({
+          caller_id: newCaller.id,
+          label: 'Home',
+          address: data.address,
+          phone: data.phoneNumber,
+          is_primary: true
+        });
+
+        // Reload caller with addresses
+        const callerWithAddresses = await callersAPI.getById(newCaller.id);
+        addCaller(callerWithAddresses);
+      } else {
+        addCaller(newCaller);
+      }
+
       toast.success('Caller added successfully');
       reset();
       onClose();
     } catch (error) {
-      toast.error('Failed to add caller');
+      console.error('Failed to add caller:', error);
+      toast.error(error.message || 'Failed to add caller');
     }
   };
 
@@ -116,6 +139,18 @@ function AddCallerModal({ isOpen, onClose }) {
                   {errors.phoneNumber && (
                     <p className="mt-1 text-sm text-red-600">{errors.phoneNumber.message}</p>
                   )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Primary Address (Optional)
+                  </label>
+                  <textarea
+                    {...register('address')}
+                    rows={2}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="Enter primary address (will be labeled as 'Home')"
+                  />
                 </div>
 
                 <div>

@@ -35,6 +35,11 @@ export const useAuthStore = create(
         if (role === 'superadmin') return user.role === 'superadmin';
         if (role === 'admin') return ['admin', 'superadmin'].includes(user.role);
         return true; // Any authenticated user
+      },
+
+      getUserCompanyId: () => {
+        const user = get().user;
+        return user?.company_id;
       }
     }),
     {

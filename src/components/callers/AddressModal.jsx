@@ -5,8 +5,9 @@ import toast from 'react-hot-toast';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { useCallerStore } from '../../store/callerStore';
+import { addressesAPI } from '../../services/supabaseAPI';
 
-const { FiX, FiMapPin, FiTag, FiFileText } = FiIcons;
+const { FiX, FiMapPin, FiTag, FiFileText, FiPhone } = FiIcons;
 
 function AddressModal({ isOpen, onClose, callerId, address }) {
   const { addAddress, updateAddress } = useCallerStore();
@@ -14,8 +15,9 @@ function AddressModal({ isOpen, onClose, callerId, address }) {
   
   const { register, handleSubmit, formState: { errors }, reset } = useForm({
     defaultValues: {
-      label: address?.label || '',
+      label: address?.label || 'Home',
       address: address?.address || '',
+      phone: address?.phone || '',
       comment: address?.comment || ''
     }
   });
@@ -23,14 +25,14 @@ function AddressModal({ isOpen, onClose, callerId, address }) {
   const onSubmit = async (data) => {
     try {
       if (isEditing) {
-        updateAddress(callerId, address.id, data);
+        const updatedAddress = await addressesAPI.update(address.id, data);
+        updateAddress(callerId, address.id, updatedAddress);
         toast.success('Address updated successfully');
       } else {
-        const newAddress = {
-          id: Date.now(), // Mock ID
+        const newAddress = await addressesAPI.create({
           caller_id: callerId,
           ...data
-        };
+        });
         addAddress(callerId, newAddress);
         toast.success('Address added successfully');
       }
@@ -38,7 +40,8 @@ function AddressModal({ isOpen, onClose, callerId, address }) {
       reset();
       onClose();
     } catch (error) {
-      toast.error(`Failed to ${isEditing ? 'update' : 'add'} address`);
+      console.error(`Failed to ${isEditing ? 'update' : 'add'} address:`, error);
+      toast.error(error.message || `Failed to ${isEditing ? 'update' : 'add'} address`);
     }
   };
 
@@ -121,6 +124,23 @@ function AddressModal({ isOpen, onClose, callerId, address }) {
                   {errors.address && (
                     <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>
                   )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Phone Number (Optional)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <SafeIcon icon={FiPhone} className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      {...register('phone')}
+                      type="tel"
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="Phone number for this address"
+                    />
+                  </div>
                 </div>
 
                 <div>

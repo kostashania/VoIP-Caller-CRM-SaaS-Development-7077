@@ -3,15 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { useCallStore } from '../../store/callStore';
-import { useCallerStore } from '../../store/callerStore';
+import { callsAPI } from '../../services/supabaseAPI';
 
 const { FiPhone, FiPhoneOff, FiUser, FiMapPin } = FiIcons;
 
 function IncomingCallModal() {
   const { incomingCall, clearIncomingCall, updateCallStatus } = useCallStore();
-  const { getCallerByPhone } = useCallerStore();
-
-  const caller = incomingCall ? getCallerByPhone(incomingCall.caller_number) : null;
 
   useEffect(() => {
     // Auto-clear incoming call after 30 seconds
@@ -24,21 +21,35 @@ function IncomingCallModal() {
     return () => clearTimeout(timer);
   }, [incomingCall]);
 
-  const handleAnswer = () => {
+  const handleAnswer = async () => {
     if (incomingCall) {
-      updateCallStatus(incomingCall.id, 'answered');
-      clearIncomingCall();
+      try {
+        await callsAPI.updateStatus(incomingCall.id, 'answered', {
+          duration_seconds: 0 // Will be updated when call ends
+        });
+        updateCallStatus(incomingCall.id, 'answered');
+        clearIncomingCall();
+      } catch (error) {
+        console.error('Failed to update call status:', error);
+      }
     }
   };
 
-  const handleMissed = () => {
+  const handleMissed = async () => {
     if (incomingCall) {
-      updateCallStatus(incomingCall.id, 'missed');
-      clearIncomingCall();
+      try {
+        await callsAPI.updateStatus(incomingCall.id, 'missed');
+        updateCallStatus(incomingCall.id, 'missed');
+        clearIncomingCall();
+      } catch (error) {
+        console.error('Failed to update call status:', error);
+      }
     }
   };
 
   if (!incomingCall) return null;
+
+  const caller = incomingCall.caller;
 
   return (
     <AnimatePresence>
@@ -91,9 +102,19 @@ function IncomingCallModal() {
                       <p className="italic">"{caller.global_note}"</p>
                     )}
                     {caller.addresses && caller.addresses.length > 0 && (
-                      <div className="flex items-center justify-center space-x-1">
-                        <SafeIcon icon={FiMapPin} className="w-4 h-4" />
-                        <span>{caller.addresses[0].label}: {caller.addresses[0].address}</span>
+                      <div className="space-y-1">
+                        {caller.addresses.slice(0, 2).map((address, index) => (
+                          <div key={address.id} className="flex items-center justify-center space-x-1">
+                            <SafeIcon icon={FiMapPin} className="w-4 h-4" />
+                            <span className="font-medium">{address.label}:</span>
+                            <span>{address.address}</span>
+                          </div>
+                        ))}
+                        {caller.addresses.length > 2 && (
+                          <p className="text-xs text-gray-400">
+                            +{caller.addresses.length - 2} more addresses
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>

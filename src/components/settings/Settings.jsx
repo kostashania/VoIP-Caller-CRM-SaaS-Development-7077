@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { useAuthStore } from '../../store/authStore';
-import { mockAPI } from '../../services/mockData';
+import { voipAPI } from '../../services/supabaseAPI';
 
 const { FiSettings, FiPhone, FiGlobe, FiUser, FiLock, FiCheckCircle, FiAlertCircle } = FiIcons;
 
@@ -13,45 +13,108 @@ function Settings() {
   const [activeTab, setActiveTab] = useState('voip');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState(null);
-  const { user, hasRole } = useAuthStore();
+  const [isLoading, setIsLoading] = useState(false);
+  const { user, hasRole, getUserCompanyId } = useAuthStore();
 
-  const { register, handleSubmit, formState: { errors }, setValue } = useForm();
+  const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm();
 
   useEffect(() => {
-    // Load existing VoIP settings
-    const loadSettings = async () => {
+    const loadVoipSettings = async () => {
+      if (!hasRole('admin')) return;
+      
       try {
-        // Mock existing settings
-        setValue('voipUrl', 'https://api.voipservice.com/webhook');
-        setValue('voipUsername', 'techcorp_user');
-        setValue('voipPassword', '');
-        setValue('sipId', 'techcorp123');
-        setValue('protocol', 'SIP');
+        setIsLoading(true);
+        const companyId = getUserCompanyId();
+        if (!companyId) return;
+
+        const settings = await voipAPI.getSettings(companyId);
+        if (settings) {
+          setValue('voipUrl', settings.voip_url || '');
+          setValue('voipUsername', settings.voip_username || '');
+          setValue('voipPassword', ''); // Don't populate password for security
+          setValue('sipId', settings.sip_id || '');
+          setValue('protocol', settings.protocol || 'SIP');
+          setValue('webhookSecret', settings.webhook_secret || '');
+          
+          if (settings.last_test_status) {
+            setConnectionStatus({
+              success: settings.last_test_status === 'success',
+              message: settings.last_test_status === 'success' 
+                ? 'Last test was successful' 
+                : 'Last test failed',
+              tested_at: settings.last_test_at
+            });
+          }
+        }
       } catch (error) {
-        console.error('Failed to load settings:', error);
+        console.error('Failed to load VoIP settings:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    loadSettings();
-  }, [setValue]);
+    loadVoipSettings();
+  }, [setValue, hasRole, getUserCompanyId]);
 
   const onSubmitVoip = async (data) => {
     try {
-      // Mock API call
+      const companyId = getUserCompanyId();
+      if (!companyId) {
+        throw new Error('No company ID found');
+      }
+
+      // Only include password if it's provided
+      const settingsData = {
+        voip_url: data.voipUrl,
+        voip_username: data.voipUsername,
+        sip_id: data.sipId,
+        protocol: data.protocol,
+        webhook_secret: data.webhookSecret
+      };
+
+      if (data.voipPassword) {
+        settingsData.voip_password = data.voipPassword;
+      }
+
+      await voipAPI.updateSettings(companyId, settingsData);
       toast.success('VoIP settings saved successfully');
     } catch (error) {
-      toast.error('Failed to save VoIP settings');
+      console.error('Failed to save VoIP settings:', error);
+      toast.error(error.message || 'Failed to save VoIP settings');
     }
   };
 
   const testConnection = async () => {
-    setIsTestingConnection(true);
     try {
-      const result = await mockAPI.testVoipConnection({});
-      setConnectionStatus({ success: true, message: result.message });
-      toast.success('Connection test successful');
+      const companyId = getUserCompanyId();
+      if (!companyId) {
+        throw new Error('No company ID found');
+      }
+
+      setIsTestingConnection(true);
+      const formData = watch();
+      
+      const result = await voipAPI.testConnection(companyId, {
+        voip_url: formData.voipUrl,
+        voip_username: formData.voipUsername,
+        voip_password: formData.voipPassword,
+        protocol: formData.protocol
+      });
+
+      setConnectionStatus(result);
+      
+      if (result.success) {
+        toast.success('Connection test successful');
+      } else {
+        toast.error('Connection test failed');
+      }
     } catch (error) {
-      setConnectionStatus({ success: false, message: error.message });
+      console.error('Connection test failed:', error);
+      setConnectionStatus({ 
+        success: false, 
+        message: error.message || 'Connection test failed',
+        tested_at: new Date().toISOString()
+      });
       toast.error('Connection test failed');
     } finally {
       setIsTestingConnection(false);
@@ -114,137 +177,175 @@ function Settings() {
                 <h3 className="text-lg font-medium text-gray-900 mb-2">VoIP Integration</h3>
                 <p className="text-sm text-gray-500 mb-6">
                   Configure your VoIP service connection to receive incoming call notifications.
+                  {!hasRole('admin') && (
+                    <span className="block text-red-500 mt-1">
+                      Only admins can modify VoIP settings.
+                    </span>
+                  )}
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit(onSubmitVoip)} className="space-y-6">
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Webhook URL
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <SafeIcon icon={FiGlobe} className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <input
-                        {...register('voipUrl', { required: 'Webhook URL is required' })}
-                        type="url"
-                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        placeholder="https://api.voipservice.com/webhook"
-                      />
-                    </div>
-                    {errors.voipUrl && (
-                      <p className="mt-1 text-sm text-red-600">{errors.voipUrl.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Username
-                    </label>
-                    <input
-                      {...register('voipUsername', { required: 'Username is required' })}
-                      type="text"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Enter username"
-                    />
-                    {errors.voipUsername && (
-                      <p className="mt-1 text-sm text-red-600">{errors.voipUsername.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Password / API Key
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <SafeIcon icon={FiLock} className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <input
-                        {...register('voipPassword', { required: 'Password is required' })}
-                        type="password"
-                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        placeholder="Enter password or API key"
-                      />
-                    </div>
-                    {errors.voipPassword && (
-                      <p className="mt-1 text-sm text-red-600">{errors.voipPassword.message}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      SIP ID (Optional)
-                    </label>
-                    <input
-                      {...register('sipId')}
-                      type="text"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Enter SIP ID"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Protocol
-                    </label>
-                    <select
-                      {...register('protocol')}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    >
-                      <option value="SIP">SIP</option>
-                      <option value="HTTP">HTTP</option>
-                      <option value="HTTPS">HTTPS</option>
-                    </select>
-                  </div>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
                 </div>
-
-                {/* Connection Status */}
-                {connectionStatus && (
-                  <div className={`rounded-md p-4 ${
-                    connectionStatus.success ? 'bg-green-50' : 'bg-red-50'
-                  }`}>
-                    <div className="flex">
-                      <div className="flex-shrink-0">
-                        <SafeIcon 
-                          icon={connectionStatus.success ? FiCheckCircle : FiAlertCircle}
-                          className={`h-5 w-5 ${
-                            connectionStatus.success ? 'text-green-400' : 'text-red-400'
-                          }`}
+              ) : (
+                <form onSubmit={handleSubmit(onSubmitVoip)} className="space-y-6">
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Webhook URL
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <SafeIcon icon={FiGlobe} className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                          {...register('voipUrl', { required: 'Webhook URL is required' })}
+                          type="url"
+                          disabled={!hasRole('admin')}
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
+                          placeholder="https://api.voipservice.com/webhook"
                         />
                       </div>
-                      <div className="ml-3">
-                        <p className={`text-sm font-medium ${
-                          connectionStatus.success ? 'text-green-800' : 'text-red-800'
-                        }`}>
-                          {connectionStatus.message}
-                        </p>
+                      {errors.voipUrl && (
+                        <p className="mt-1 text-sm text-red-600">{errors.voipUrl.message}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Username
+                      </label>
+                      <input
+                        {...register('voipUsername', { required: 'Username is required' })}
+                        type="text"
+                        disabled={!hasRole('admin')}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
+                        placeholder="Enter username"
+                      />
+                      {errors.voipUsername && (
+                        <p className="mt-1 text-sm text-red-600">{errors.voipUsername.message}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Password / API Key
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <SafeIcon icon={FiLock} className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                          {...register('voipPassword')}
+                          type="password"
+                          disabled={!hasRole('admin')}
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
+                          placeholder="Enter password or API key (leave blank to keep current)"
+                        />
                       </div>
+                      {errors.voipPassword && (
+                        <p className="mt-1 text-sm text-red-600">{errors.voipPassword.message}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        SIP ID (Optional)
+                      </label>
+                      <input
+                        {...register('sipId')}
+                        type="text"
+                        disabled={!hasRole('admin')}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
+                        placeholder="Enter SIP ID"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Protocol
+                      </label>
+                      <select
+                        {...register('protocol')}
+                        disabled={!hasRole('admin')}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
+                      >
+                        <option value="SIP">SIP</option>
+                        <option value="HTTP">HTTP</option>
+                        <option value="HTTPS">HTTPS</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Webhook Secret (Optional)
+                      </label>
+                      <input
+                        {...register('webhookSecret')}
+                        type="text"
+                        disabled={!hasRole('admin')}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
+                        placeholder="Enter webhook secret for verification"
+                      />
                     </div>
                   </div>
-                )}
 
-                {/* Actions */}
-                <div className="flex space-x-3">
-                  <button
-                    type="button"
-                    onClick={testConnection}
-                    disabled={isTestingConnection}
-                    className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    <SafeIcon icon={FiPhone} className="w-4 h-4" />
-                    <span>{isTestingConnection ? 'Testing...' : 'Test Connection'}</span>
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700"
-                  >
-                    Save Settings
-                  </button>
-                </div>
-              </form>
+                  {/* Connection Status */}
+                  {connectionStatus && (
+                    <div className={`rounded-md p-4 ${
+                      connectionStatus.success ? 'bg-green-50' : 'bg-red-50'
+                    }`}>
+                      <div className="flex">
+                        <div className="flex-shrink-0">
+                          <SafeIcon 
+                            icon={connectionStatus.success ? FiCheckCircle : FiAlertCircle}
+                            className={`h-5 w-5 ${
+                              connectionStatus.success ? 'text-green-400' : 'text-red-400'
+                            }`}
+                          />
+                        </div>
+                        <div className="ml-3">
+                          <p className={`text-sm font-medium ${
+                            connectionStatus.success ? 'text-green-800' : 'text-red-800'
+                          }`}>
+                            {connectionStatus.message}
+                          </p>
+                          {connectionStatus.tested_at && (
+                            <p className={`text-xs mt-1 ${
+                              connectionStatus.success ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              Last tested: {new Date(connectionStatus.tested_at).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  {hasRole('admin') && (
+                    <div className="flex space-x-3">
+                      <button
+                        type="button"
+                        onClick={testConnection}
+                        disabled={isTestingConnection}
+                        className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        <SafeIcon icon={FiPhone} className="w-4 h-4" />
+                        <span>{isTestingConnection ? 'Testing...' : 'Test Connection'}</span>
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700"
+                      >
+                        Save Settings
+                      </button>
+                    </div>
+                  )}
+                </form>
+              )}
             </motion.div>
           )}
 

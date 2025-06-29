@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
-import { mockCompanies } from '../../services/mockData';
+import { companiesAPI } from '../../services/supabaseAPI';
 import AddCompanyModal from './AddCompanyModal';
 
 const { FiBriefcase, FiPlus, FiEdit, FiTrash2, FiCalendar, FiUsers, FiCheckCircle, FiAlertCircle } = FiIcons;
@@ -14,20 +14,20 @@ function CompanyManagement() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loadCompanies = async () => {
-      setIsLoading(true);
-      try {
-        // Mock API call
-        setCompanies(mockCompanies);
-      } catch (error) {
-        console.error('Failed to load companies:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadCompanies();
   }, []);
+
+  const loadCompanies = async () => {
+    setIsLoading(true);
+    try {
+      const data = await companiesAPI.getAll();
+      setCompanies(data);
+    } catch (error) {
+      console.error('Failed to load companies:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getSubscriptionStatus = (endDate) => {
     const end = new Date(endDate);
@@ -41,6 +41,11 @@ function CompanyManagement() {
     } else {
       return { status: 'active', label: 'Active', color: 'text-green-600 bg-green-100' };
     }
+  };
+
+  const handleCompanyAdded = () => {
+    setShowAddCompany(false);
+    loadCompanies(); // Reload companies
   };
 
   if (isLoading) {
@@ -79,6 +84,7 @@ function CompanyManagement() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
           {companies.map((company, index) => {
             const subscription = getSubscriptionStatus(company.subscription_end);
+            const voipSettings = company.voip_settings?.[0];
             
             return (
               <motion.div
@@ -96,7 +102,7 @@ function CompanyManagement() {
                     </div>
                     <div>
                       <h3 className="text-lg font-medium text-gray-900">{company.name}</h3>
-                      <p className="text-sm text-gray-500">ID: {company.id}</p>
+                      <p className="text-sm text-gray-500">ID: {company.id.slice(0, 8)}...</p>
                     </div>
                   </div>
                   <div className="flex space-x-1">
@@ -137,9 +143,16 @@ function CompanyManagement() {
                 <div className="mb-4">
                   <h4 className="text-sm font-medium text-gray-700 mb-2">VoIP Configuration</h4>
                   <div className="text-sm text-gray-500 space-y-1">
-                    <p>URL: {company.voip_url ? '✓ Configured' : '✗ Not set'}</p>
-                    <p>Username: {company.voip_username ? '✓ Set' : '✗ Not set'}</p>
-                    <p>Password: {company.voip_password ? '✓ Set' : '✗ Not set'}</p>
+                    <p>URL: {voipSettings?.voip_url ? '✓ Configured' : '✗ Not set'}</p>
+                    <p>Username: {voipSettings?.voip_username ? '✓ Set' : '✗ Not set'}</p>
+                    <p>Password: {voipSettings?.voip_password ? '✓ Set' : '✗ Not set'}</p>
+                    {voipSettings?.last_test_status && (
+                      <p className={`text-xs ${
+                        voipSettings.last_test_status === 'success' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        Last test: {voipSettings.last_test_status}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -148,7 +161,7 @@ function CompanyManagement() {
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center space-x-1 text-gray-500">
                       <SafeIcon icon={FiUsers} className="w-4 h-4" />
-                      <span>Users: 2</span>
+                      <span>Users: {company.user_count?.[0]?.count || 0}</span>
                     </div>
                     <button className="text-primary-600 hover:text-primary-500">
                       View Details →
@@ -177,6 +190,7 @@ function CompanyManagement() {
         <AddCompanyModal
           isOpen={showAddCompany}
           onClose={() => setShowAddCompany(false)}
+          onSuccess={handleCompanyAdded}
         />
       )}
     </>

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { format } from 'date-fns';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { useCallStore } from '../../store/callStore';
 import { useCallerStore } from '../../store/callerStore';
-import { mockAPI, mockCalls, mockCallers } from '../../services/mockData';
+import { useAuthStore } from '../../store/authStore';
+import { callsAPI, callersAPI } from '../../services/supabaseAPI';
 import StatsCards from './StatsCards';
 import RecentCalls from './RecentCalls';
 import QuickActions from './QuickActions';
@@ -16,16 +16,23 @@ function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const { calls, setCalls, setCallHistory } = useCallStore();
   const { setCallers } = useCallerStore();
+  const { getUserCompanyId, user } = useAuthStore();
 
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
         setIsLoading(true);
+        const companyId = getUserCompanyId();
         
-        // Load mock data
+        if (!companyId && user.role !== 'superadmin') {
+          console.error('No company ID found for user');
+          return;
+        }
+
+        // Load calls and callers for the user's company
         const [callsData, callersData] = await Promise.all([
-          mockAPI.getCalls(),
-          mockAPI.getCallers()
+          companyId ? callsAPI.getAll(companyId) : [],
+          companyId ? callersAPI.getAll(companyId) : []
         ]);
         
         setCalls(callsData);
@@ -39,7 +46,7 @@ function Dashboard() {
     };
 
     loadDashboardData();
-  }, [setCalls, setCallHistory, setCallers]);
+  }, [setCalls, setCallHistory, setCallers, getUserCompanyId, user]);
 
   if (isLoading) {
     return (
@@ -58,8 +65,13 @@ function Dashboard() {
             Dashboard
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Welcome back! Here's what's happening with your calls today.
+            Welcome back, {user?.name}! Here's what's happening with your calls today.
           </p>
+          {user?.company && (
+            <p className="text-sm text-gray-400">
+              Company: {user.company.name}
+            </p>
+          )}
         </div>
       </div>
 

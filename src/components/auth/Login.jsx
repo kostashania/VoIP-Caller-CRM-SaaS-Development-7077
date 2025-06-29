@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -6,24 +6,42 @@ import toast from 'react-hot-toast';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { useAuthStore } from '../../store/authStore';
-import { mockAPI } from '../../services/mockData';
+import { authAPI } from '../../services/supabaseAPI';
+import { setupDemoData } from '../../services/setupDemoData';
 
 const { FiPhone, FiUser, FiLock, FiEye, FiEyeOff } = FiIcons;
 
 function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSettingUpDemo, setIsSettingUpDemo] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuthStore();
   
   const { register, handleSubmit, formState: { errors } } = useForm();
 
+  useEffect(() => {
+    // Setup demo data on first load
+    const initializeDemoData = async () => {
+      setIsSettingUpDemo(true);
+      try {
+        await setupDemoData();
+      } catch (error) {
+        console.error('Failed to setup demo data:', error);
+      } finally {
+        setIsSettingUpDemo(false);
+      }
+    };
+
+    initializeDemoData();
+  }, []);
+
   const onSubmit = async (data) => {
     setIsLoading(true);
     try {
-      const response = await mockAPI.login(data.email, data.password);
+      const response = await authAPI.login(data.email, data.password);
       login(response.user, response.token);
-      toast.success('Welcome back!');
+      toast.success(`Welcome back, ${response.user.name}!`);
       navigate('/dashboard');
     } catch (error) {
       toast.error(error.message);
@@ -31,6 +49,25 @@ function Login() {
       setIsLoading(false);
     }
   };
+
+  if (isSettingUpDemo) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center"
+        >
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
+            <SafeIcon icon={FiPhone} className="w-8 h-8 text-primary-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Setting Up Demo</h1>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Initializing demo data...</p>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
@@ -52,10 +89,11 @@ function Login() {
         <div className="bg-gray-50 rounded-lg p-4 mb-6">
           <p className="text-sm font-medium text-gray-700 mb-2">Demo Credentials:</p>
           <div className="space-y-1 text-sm text-gray-600">
-            <p><strong>Admin:</strong> admin@company1.com</p>
-            <p><strong>User:</strong> user@company1.com</p>
             <p><strong>Super Admin:</strong> super@voipcrm.com</p>
-            <p className="text-xs text-gray-500 mt-2">Password: any text</p>
+            <p><strong>Company 1 Admin:</strong> admin@company1.com</p>
+            <p><strong>Company 1 User:</strong> user@company1.com</p>
+            <p><strong>Company 2 Admin:</strong> admin@company2.com</p>
+            <p className="text-xs text-gray-500 mt-2">Password: any text (demo mode)</p>
           </div>
         </div>
 

@@ -4,21 +4,22 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
+import { companiesAPI } from '../../services/supabaseAPI';
 
 const { FiX, FiBriefcase, FiCalendar, FiUser, FiMail } = FiIcons;
 
-function AddCompanyModal({ isOpen, onClose }) {
+function AddCompanyModal({ isOpen, onClose, onSuccess }) {
   const { register, handleSubmit, formState: { errors }, reset } = useForm();
 
   const onSubmit = async (data) => {
     try {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await companiesAPI.create(data);
       toast.success('Company added successfully');
       reset();
-      onClose();
+      onSuccess(); // Call the success callback
     } catch (error) {
-      toast.error('Failed to add company');
+      console.error('Failed to add company:', error);
+      toast.error(error.message || 'Failed to add company');
     }
   };
 

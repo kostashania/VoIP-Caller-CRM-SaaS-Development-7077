@@ -1,5 +1,7 @@
 import { useCallStore } from '../store/callStore';
 import { useCallerStore } from '../store/callerStore';
+import { useAuthStore } from '../store/authStore';
+import { callsAPI, callersAPI } from './supabaseAPI';
 
 class WebSocketService {
   constructor() {
@@ -25,9 +27,9 @@ class WebSocketService {
   }
 
   simulateIncomingCalls() {
-    // Simulate incoming calls every 30 seconds for demo
+    // Simulate incoming calls every 45 seconds for demo
     setInterval(() => {
-      if (Math.random() > 0.7) { // 30% chance of incoming call
+      if (Math.random() > 0.8) { // 20% chance of incoming call
         this.handleIncomingCall({
           id: Date.now(),
           caller_number: this.getRandomPhoneNumber(),
@@ -35,7 +37,7 @@ class WebSocketService {
           call_status: 'incoming'
         });
       }
-    }, 30000);
+    }, 45000);
   }
 
   getRandomPhoneNumber() {
@@ -43,23 +45,37 @@ class WebSocketService {
     return numbers[Math.floor(Math.random() * numbers.length)];
   }
 
-  handleIncomingCall(callData) {
+  async handleIncomingCall(callData) {
     const { setIncomingCall, addCall } = useCallStore.getState();
     const { getCallerByPhone } = useCallerStore.getState();
+    const { getUserCompanyId } = useAuthStore.getState();
     
-    // Check if caller exists
-    const caller = getCallerByPhone(callData.caller_number);
-    
-    // Add call to history
-    const newCall = {
-      ...callData,
-      caller_id: caller?.id || null,
-      caller: caller || null,
-      company_id: 1 // Mock company ID
-    };
-    
-    addCall(newCall);
-    setIncomingCall(newCall);
+    const companyId = getUserCompanyId();
+    if (!companyId) return;
+
+    try {
+      // Check if caller exists in the database
+      const caller = await callersAPI.getByPhone(companyId, callData.caller_number);
+      
+      // Create call record in database
+      const newCall = await callsAPI.create({
+        company_id: companyId,
+        caller_id: caller?.id || null,
+        caller_number: callData.caller_number,
+        call_status: 'incoming',
+        timestamp: callData.timestamp,
+        voip_raw_payload: callData
+      });
+
+      // Add caller info to call object
+      newCall.caller = caller;
+      
+      // Update local state
+      addCall(newCall);
+      setIncomingCall(newCall);
+    } catch (error) {
+      console.error('Failed to handle incoming call:', error);
+    }
   }
 
   scheduleReconnect() {
