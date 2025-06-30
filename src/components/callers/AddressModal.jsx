@@ -4,16 +4,17 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
-import { useCallerStore } from '../../store/callerStore';
-import { addressesAPI } from '../../services/supabaseAPI';
 
 const { FiX, FiMapPin, FiTag, FiFileText, FiPhone } = FiIcons;
 
-function AddressModal({ isOpen, onClose, callerId, address }) {
-  const { addAddress, updateAddress } = useCallerStore();
+function AddressModal({ isOpen, onClose, callerId, address, onSubmit }) {
   const isEditing = !!address;
-  
-  const { register, handleSubmit, formState: { errors }, reset } = useForm({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset
+  } = useForm({
     defaultValues: {
       label: address?.label || 'Home',
       address: address?.address || '',
@@ -22,23 +23,10 @@ function AddressModal({ isOpen, onClose, callerId, address }) {
     }
   });
 
-  const onSubmit = async (data) => {
+  const handleFormSubmit = async (data) => {
     try {
-      if (isEditing) {
-        const updatedAddress = await addressesAPI.update(address.id, data);
-        updateAddress(callerId, address.id, updatedAddress);
-        toast.success('Address updated successfully');
-      } else {
-        const newAddress = await addressesAPI.create({
-          caller_id: callerId,
-          ...data
-        });
-        addAddress(callerId, newAddress);
-        toast.success('Address added successfully');
-      }
-      
+      await onSubmit(data);
       reset();
-      onClose();
     } catch (error) {
       console.error(`Failed to ${isEditing ? 'update' : 'add'} address:`, error);
       toast.error(error.message || `Failed to ${isEditing ? 'update' : 'add'} address`);
@@ -53,7 +41,7 @@ function AddressModal({ isOpen, onClose, callerId, address }) {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-[60] overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             {/* Backdrop */}
             <motion.div
@@ -85,7 +73,7 @@ function AddressModal({ isOpen, onClose, callerId, address }) {
               </div>
 
               {/* Form */}
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Label
@@ -94,12 +82,18 @@ function AddressModal({ isOpen, onClose, callerId, address }) {
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <SafeIcon icon={FiTag} className="h-5 w-5 text-gray-400" />
                     </div>
-                    <input
+                    <select
                       {...register('label', { required: 'Label is required' })}
-                      type="text"
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="e.g., Home, Work, Office"
-                    />
+                    >
+                      <option value="Home">🏠 Home</option>
+                      <option value="Work">🏢 Work</option>
+                      <option value="Office">🏬 Office</option>
+                      <option value="Home 2">🏡 Home 2</option>
+                      <option value="Warehouse">🏭 Warehouse</option>
+                      <option value="Store">🏪 Store</option>
+                      <option value="Other">📍 Other</option>
+                    </select>
                   </div>
                   {errors.label && (
                     <p className="mt-1 text-sm text-red-600">{errors.label.message}</p>

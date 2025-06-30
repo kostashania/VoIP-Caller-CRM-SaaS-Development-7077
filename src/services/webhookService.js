@@ -8,10 +8,18 @@ import toast from 'react-hot-toast';
 class WebhookService {
   constructor() {
     this.isListening = false;
+    this.isSimulating = false;
     this.eventSource = null;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 5000;
+    this.simulationTimer = null;
+    this.randomSimulationTimer = null;
+    this.stats = {
+      totalReceived: 0,
+      todayReceived: 0,
+      lastReceived: null
+    };
   }
 
   // Generate webhook URL for the company
@@ -22,7 +30,7 @@ class WebhookService {
     return `${baseUrl}/api/webhook/incoming-call/${companyId}`;
   }
 
-  // Start listening for webhook events via Server-Sent Events or polling
+  // Start listening for webhook events
   startListening(companyId) {
     if (this.isListening) {
       console.log('Webhook service already listening');
@@ -41,7 +49,6 @@ class WebhookService {
       console.log('📞 Webhook URL:', this.getWebhookUrl(companyId));
       
       toast.success('Webhook listener started - ready to receive calls!', { duration: 3000 });
-      
     } catch (error) {
       console.error('Failed to start webhook listener:', error);
       this.isListening = false;
@@ -51,67 +58,143 @@ class WebhookService {
 
   stopListening() {
     console.log('🛑 Stopping webhook listener...');
-    
     this.isListening = false;
-    
+    this.isSimulating = false;
+
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
     }
-    
+
     // Clear any simulation timers
     if (this.simulationTimer) {
       clearTimeout(this.simulationTimer);
       this.simulationTimer = null;
     }
-    
+
+    if (this.randomSimulationTimer) {
+      clearTimeout(this.randomSimulationTimer);
+      this.randomSimulationTimer = null;
+    }
+
     console.log('✅ Webhook listener stopped');
     toast.success('Webhook listener stopped', { duration: 2000 });
   }
 
-  // Simulate webhook calls for demo (remove this in production)
-  simulateWebhookCalls(companyId) {
-    const scheduleNextCall = () => {
-      if (!this.isListening) return;
+  // Start random simulation (every 1-3 minutes)
+  startRandomSimulation(companyId) {
+    if (this.isSimulating) {
+      console.log('Random simulation already running');
+      return;
+    }
 
-      // Random delay between 20-60 seconds
-      const delay = Math.random() * 40000 + 20000;
-      
-      this.simulationTimer = setTimeout(() => {
-        if (this.isListening) {
-          // Simulate webhook call
+    this.isSimulating = true;
+    console.log('🎭 Starting random call simulation...');
+
+    const scheduleRandomCall = () => {
+      if (!this.isSimulating || !this.isListening) return;
+
+      // Random delay between 1-3 minutes (60000-180000 ms)
+      const delay = Math.random() * 120000 + 60000;
+
+      this.randomSimulationTimer = setTimeout(() => {
+        if (this.isSimulating && this.isListening) {
           const callerId = this.getRandomCallerId();
-          console.log('📱 Simulating webhook call from:', callerId);
+          console.log('📱 Random simulation call from:', callerId);
           
           this.handleWebhookCall({
             caller_id: callerId,
             timestamp: new Date().toISOString(),
             call_type: 'incoming',
-            webhook_id: `webhook-${Date.now()}`,
-            source: 'demo_webhook'
+            webhook_id: `random-${Date.now()}`,
+            source: 'random_simulation'
           }, companyId);
-          
-          scheduleNextCall();
+
+          scheduleRandomCall();
         }
       }, delay);
     };
 
     // Start first call after 10 seconds
     setTimeout(() => {
-      if (this.isListening) {
-        scheduleNextCall();
+      if (this.isSimulating && this.isListening) {
+        scheduleRandomCall();
       }
     }, 10000);
   }
 
-  getRandomCallerId() {
-    const knownCallers = ['+1234567890', '+0987654321', '+1122334455'];
-    const unknownCallers = [
-      '+1555000001', '+1555000002', '+1555000003',
-      '+1666777888', '+1777888999', '+1888999000',
-      '+306912345678', '+306987654321', '+306911223344'
-    ];
+  stopSimulation() {
+    this.isSimulating = false;
     
+    if (this.randomSimulationTimer) {
+      clearTimeout(this.randomSimulationTimer);
+      this.randomSimulationTimer = null;
+    }
+
+    console.log('🛑 Random simulation stopped');
+  }
+
+  // Simulate webhook calls for demo (existing method - kept for compatibility)
+  simulateWebhookCalls(companyId) {
+    const scheduleNextCall = () => {
+      if (!this.isListening) return;
+
+      // Random delay between 20-60 seconds for regular demo
+      const delay = Math.random() * 40000 + 20000;
+
+      this.simulationTimer = setTimeout(() => {
+        if (this.isListening) {
+          // Only trigger if random simulation is not running
+          if (!this.isSimulating) {
+            const callerId = this.getRandomCallerId();
+            console.log('📱 Demo webhook call from:', callerId);
+            
+            this.handleWebhookCall({
+              caller_id: callerId,
+              timestamp: new Date().toISOString(),
+              call_type: 'incoming',
+              webhook_id: `demo-${Date.now()}`,
+              source: 'demo_webhook'
+            }, companyId);
+          }
+          
+          scheduleNextCall();
+        }
+      }, delay);
+    };
+
+    // Start first call after 15 seconds
+    setTimeout(() => {
+      if (this.isListening) {
+        scheduleNextCall();
+      }
+    }, 15000);
+  }
+
+  getRandomCallerId() {
+    // Known callers (these will have existing records)
+    const knownCallers = [
+      '+1234567890',
+      '+0987654321', 
+      '+1122334455'
+    ];
+
+    // Unknown callers (these will trigger new customer creation)
+    const unknownCallers = [
+      '+1555000001',
+      '+1555000002', 
+      '+1555000003',
+      '+1666777888',
+      '+1777888999',
+      '+1888999000',
+      '+306912345678',
+      '+306987654321',
+      '+306911223344',
+      '+44207123456',
+      '+33123456789',
+      '+49301234567'
+    ];
+
     const allCallers = [...knownCallers, ...unknownCallers];
     return allCallers[Math.floor(Math.random() * allCallers.length)];
   }
@@ -131,10 +214,10 @@ class WebhookService {
 
       // Extract and clean caller ID
       const callerId = this.cleanCallerId(webhookData.caller_id);
-      
+
       // Check if caller exists in database
       const existingCaller = await callersAPI.getByPhone(companyId, callerId);
-      
+
       // Create call log entry
       const callLog = await callLogsAPI.create({
         company_id: companyId,
@@ -159,6 +242,9 @@ class WebhookService {
       addCallLog(callLog);
       setIncomingCall(incomingCallData);
 
+      // Update statistics
+      this.updateStats();
+
       // Play notification sound
       this.playNotificationSound();
 
@@ -168,27 +254,29 @@ class WebhookService {
         callLogId: callLog.id
       });
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         callLogId: callLog.id,
-        callerFound: !!existingCaller 
+        callerFound: !!existingCaller
       };
-
     } catch (error) {
       console.error('❌ Failed to process webhook call:', error);
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 
   cleanCallerId(rawCallerId) {
     // Remove any non-numeric characters except +
     let cleaned = String(rawCallerId).replace(/[^\d+]/g, '');
-    
+
     // Ensure it starts with + for international format
     if (!cleaned.startsWith('+')) {
       cleaned = '+' + cleaned;
     }
-    
+
     return cleaned;
   }
 
@@ -204,7 +292,6 @@ class WebhookService {
 
       // Create phone ringing sound
       const now = audioContext.currentTime;
-      
       for (let i = 0; i < 3; i++) {
         const startTime = now + (i * 1);
         oscillator.frequency.setValueAtTime(800, startTime);
@@ -214,22 +301,36 @@ class WebhookService {
 
       oscillator.start(now);
       oscillator.stop(now + 3);
-      
+
       console.log('🔔 Playing webhook call notification');
     } catch (error) {
       console.warn('Could not play notification sound:', error);
     }
   }
 
+  updateStats() {
+    this.stats.totalReceived += 1;
+    this.stats.todayReceived += 1; // In production, filter by today's date
+    this.stats.lastReceived = new Date().toISOString();
+  }
+
   getListeningStatus() {
     return this.isListening;
+  }
+
+  getSimulationStatus() {
+    return this.isSimulating;
+  }
+
+  getStats() {
+    return this.stats;
   }
 
   // Method to handle real webhook POST requests (for your backend)
   static async processWebhookRequest(request, companyId) {
     try {
       const webhookData = request.body;
-      
+
       // Validate webhook data
       if (!webhookData.caller_id) {
         throw new Error('Missing caller_id in webhook data');
@@ -238,13 +339,12 @@ class WebhookService {
       // Process the webhook
       const service = new WebhookService();
       const result = await service.handleWebhookCall(webhookData, companyId);
-      
+
       return {
         success: true,
         message: 'Webhook processed successfully',
         data: result
       };
-
     } catch (error) {
       console.error('Webhook processing error:', error);
       return {

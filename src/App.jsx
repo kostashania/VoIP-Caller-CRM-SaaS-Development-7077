@@ -14,8 +14,7 @@ import UserManagement from './components/admin/UserManagement';
 import CompanyManagement from './components/superadmin/CompanyManagement';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
-import IncomingCallPopup from './components/voip/IncomingCallPopup';
-import WebhookCallPopup from './components/voip/WebhookCallPopup';
+import IncomingCallDisplay from './components/voip/IncomingCallDisplay';
 
 function App() {
   const { user } = useAuthStore();
@@ -41,52 +40,46 @@ function App() {
           }}
         />
 
-        {/* VoIP/Webhook Incoming Call Popups */}
-        {incomingCall && (
-          <>
-            {incomingCall.isWebhookCall ? (
-              <WebhookCallPopup />
-            ) : (
-              <IncomingCallPopup />
-            )}
-          </>
-        )}
+        {/* Incoming Call Display */}
+        {incomingCall && <IncomingCallDisplay />}
 
         <Routes>
           {/* Public Routes */}
-          <Route 
-            path="/login" 
-            element={!user ? <Login /> : <Navigate to="/dashboard" />} 
+          <Route
+            path="/login"
+            element={!user ? <Login /> : <Navigate to="/dashboard" />}
           />
-          <Route 
-            path="/register" 
-            element={!user ? <Register /> : <Navigate to="/dashboard" />} 
+          <Route
+            path="/register"
+            element={!user ? <Register /> : <Navigate to="/dashboard" />}
           />
 
           {/* Protected Routes */}
-          <Route element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }>
+          <Route
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/caller/:id" element={<CallerDetails />} />
             <Route path="/settings" element={<Settings />} />
-            <Route 
-              path="/users" 
+            <Route
+              path="/users"
               element={
                 <ProtectedRoute requiredRole="admin">
                   <UserManagement />
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/companies" 
+            <Route
+              path="/companies"
               element={
                 <ProtectedRoute requiredRole="superadmin">
                   <CompanyManagement />
                 </ProtectedRoute>
-              } 
+              }
             />
           </Route>
 
