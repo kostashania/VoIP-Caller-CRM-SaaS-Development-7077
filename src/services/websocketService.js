@@ -8,7 +8,8 @@ class WebSocketService {
     this.socket = null;
     this.isConnected = false;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
+    this.maxReconnectAttempts = 3; // Reduced from 5
+    this.isEnabled = false; // Add flag to control WebSocket usage
   }
 
   connect() {
@@ -21,30 +22,49 @@ class WebSocketService {
         return;
       }
 
-      // Connect to webhook server
+      // Check if webhook server is available before attempting connection
       const serverUrl = import.meta.env.VITE_WEBHOOK_SERVER_URL || 'http://localhost:3000';
       
+      // Only attempt connection if explicitly enabled or server is available
+      if (!this.isEnabled) {
+        console.log('📡 WebSocket service disabled - using webhook service for demo calls');
+        this.isConnected = false;
+        return;
+      }
+
+      console.log('🔄 Attempting WebSocket connection to:', serverUrl);
+
       this.socket = io(serverUrl, {
         transports: ['websocket', 'polling'],
-        timeout: 20000,
-        forceNew: true
+        timeout: 10000, // Reduced timeout
+        forceNew: true,
+        autoConnect: false // Don't auto-connect
       });
 
+      // Set a connection timeout
+      const connectionTimeout = setTimeout(() => {
+        if (!this.isConnected) {
+          console.log('⏰ WebSocket connection timeout - falling back to demo mode');
+          this.handleConnectionFailure();
+        }
+      }, 5000);
+
       this.socket.on('connect', () => {
+        clearTimeout(connectionTimeout);
         console.log('✅ Connected to webhook server');
         this.isConnected = true;
         this.reconnectAttempts = 0;
-        
+
         // Join company room for targeted notifications
         this.socket.emit('join-company', companyId);
-        
         toast.success('Connected to webhook server - ready for real calls!', { duration: 3000 });
       });
 
       this.socket.on('disconnect', () => {
+        clearTimeout(connectionTimeout);
         console.log('❌ Disconnected from webhook server');
         this.isConnected = false;
-        this.scheduleReconnect();
+        // Don't auto-reconnect to avoid spam
       });
 
       this.socket.on('incoming-call', (callData) => {
@@ -53,14 +73,33 @@ class WebSocketService {
       });
 
       this.socket.on('connect_error', (error) => {
-        console.error('WebSocket connection error:', error);
-        this.isConnected = false;
-        this.scheduleReconnect();
+        clearTimeout(connectionTimeout);
+        console.log('📡 WebSocket connection failed (expected in demo mode):', error.message);
+        this.handleConnectionFailure();
       });
 
+      // Attempt connection
+      this.socket.connect();
+
     } catch (error) {
-      console.error('Failed to initialize WebSocket connection:', error);
-      this.scheduleReconnect();
+      console.log('📡 WebSocket initialization failed (using demo mode):', error.message);
+      this.handleConnectionFailure();
+    }
+  }
+
+  handleConnectionFailure() {
+    this.isConnected = false;
+    this.isEnabled = false;
+    
+    // Don't show error toast if we haven't attempted many connections
+    if (this.reconnectAttempts < 2) {
+      console.log('📡 WebSocket unavailable - using demo mode for incoming calls');
+    }
+    
+    // Clean up socket
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
     }
   }
 
@@ -84,9 +123,7 @@ class WebSocketService {
 
       // Show success notification
       const callerName = callData.caller?.name || 'Unknown Caller';
-      toast.success(`📞 Real incoming call from ${callerName} (${callData.caller_number})`, {
-        duration: 4000
-      });
+      toast.success(`📞 Real incoming call from ${callerName} (${callData.caller_number})`, { duration: 4000 });
 
       console.log('✅ Real webhook call processed successfully');
     } catch (error) {
@@ -123,19 +160,33 @@ class WebSocketService {
     }
   }
 
+  // Enable WebSocket for real mode
+  enable() {
+    this.isEnabled = true;
+    this.connect();
+  }
+
+  // Disable WebSocket
+  disable() {
+    this.isEnabled = false;
+    this.disconnect();
+  }
+
   scheduleReconnect() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+    if (this.reconnectAttempts < this.maxReconnectAttempts && this.isEnabled) {
       this.reconnectAttempts++;
-      const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+      const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000); // Max 10 seconds
       
       console.log(`🔄 Scheduling WebSocket reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
       
       setTimeout(() => {
-        this.connect();
+        if (this.isEnabled) {
+          this.connect();
+        }
       }, delay);
-    } else {
-      console.error('❌ Max WebSocket reconnection attempts reached');
-      toast.error('Lost connection to webhook server. Please refresh the page.', { duration: 5000 });
+    } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.log('❌ Max WebSocket reconnection attempts reached - staying in demo mode');
+      this.isEnabled = false;
     }
   }
 
@@ -150,27 +201,37 @@ class WebSocketService {
   getConnectionStatus() {
     return {
       isConnected: this.isConnected,
+      isEnabled: this.isEnabled,
       reconnectAttempts: this.reconnectAttempts
     };
+  }
+
+  // Method to test if webhook server is available
+  async testServerAvailability() {
+    const serverUrl = import.meta.env.VITE_WEBHOOK_SERVER_URL || 'http://localhost:3000';
+    
+    try {
+      const response = await fetch(`${serverUrl}/api/health`, {
+        method: 'GET',
+        timeout: 5000
+      });
+      
+      if (response.ok) {
+        console.log('✅ Webhook server is available');
+        return true;
+      } else {
+        console.log('⚠️ Webhook server responded but not healthy');
+        return false;
+      }
+    } catch (error) {
+      console.log('📡 Webhook server not available:', error.message);
+      return false;
+    }
   }
 }
 
 // Export singleton instance
 export const websocketService = new WebSocketService();
 
-// Auto-connect when user is authenticated
-if (typeof window !== 'undefined') {
-  // Listen for auth state changes
-  const checkAuthAndConnect = () => {
-    const { user } = useAuthStore.getState();
-    if (user) {
-      // Connect after a short delay to ensure everything is ready
-      setTimeout(() => {
-        websocketService.connect();
-      }, 2000);
-    }
-  };
-
-  // Check on load
-  setTimeout(checkAuthAndConnect, 1000);
-}
+// Don't auto-connect - let the webhook service decide when to use WebSocket
+console.log('📡 WebSocket service initialized - ready for manual activation');
