@@ -6,32 +6,42 @@ import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { useAuthStore } from '../../store/authStore';
 import { webhookService } from '../../services/webhookService';
+import { websocketService } from '../../services/websocketService';
 
-const { FiGlobe, FiSettings, FiPlay, FiStop, FiCopy, FiCheckCircle, FiAlertCircle, FiInfo, FiLink, FiActivity, FiClock, FiPhone } = FiIcons;
+const { FiGlobe, FiSettings, FiPlay, FiStop, FiCopy, FiCheckCircle, FiAlertCircle, FiInfo, FiLink, FiActivity, FiClock, FiPhone, FiWifi } = FiIcons;
 
 function WebhookSettings() {
   const [isListening, setIsListening] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isRealMode, setIsRealMode] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState(null);
   const [webhookStats, setWebhookStats] = useState({
     totalReceived: 0,
     todayReceived: 0,
     lastReceived: null
   });
+
   const { getUserCompanyId, hasRole } = useAuthStore();
 
   useEffect(() => {
     // Get webhook URL and listening status
     const companyId = getUserCompanyId();
     if (companyId) {
-      const url = webhookService.getWebhookUrl(companyId);
-      setWebhookUrl(url);
+      const demoUrl = webhookService.getWebhookUrl(companyId);
+      const realUrl = `${window.location.origin}/api/webhook/incoming-call/${companyId}`;
+      
+      setWebhookUrl(isRealMode ? realUrl : demoUrl);
       setIsListening(webhookService.getListeningStatus());
       setIsSimulating(webhookService.getSimulationStatus());
-      
+
       // Load webhook statistics
       loadWebhookStats();
+
+      // Check WebSocket connection status
+      const wsStatus = websocketService.getConnectionStatus();
+      setConnectionStatus(wsStatus);
     }
 
     // Update status every 5 seconds
@@ -39,14 +49,27 @@ function WebhookSettings() {
       setIsListening(webhookService.getListeningStatus());
       setIsSimulating(webhookService.getSimulationStatus());
       loadWebhookStats();
+      
+      const wsStatus = websocketService.getConnectionStatus();
+      setConnectionStatus(wsStatus);
     }, 5000);
 
     return () => clearInterval(statusInterval);
-  }, [getUserCompanyId]);
+  }, [getUserCompanyId, isRealMode]);
 
   const loadWebhookStats = () => {
     const stats = webhookService.getStats();
     setWebhookStats(stats);
+  };
+
+  const toggleMode = () => {
+    setIsRealMode(!isRealMode);
+    const companyId = getUserCompanyId();
+    if (companyId) {
+      const demoUrl = webhookService.getWebhookUrl(companyId);
+      const realUrl = `${window.location.origin}/api/webhook/incoming-call/${companyId}`;
+      setWebhookUrl(!isRealMode ? realUrl : demoUrl);
+    }
   };
 
   const toggleWebhookListener = async () => {
@@ -62,9 +85,16 @@ function WebhookSettings() {
         setIsSimulating(false);
         toast.success('Webhook listener stopped', { duration: 2000 });
       } else {
-        webhookService.startListening(companyId);
-        setIsListening(true);
-        toast.success('Webhook listener started - test call in 10 seconds!', { duration: 3000 });
+        if (isRealMode) {
+          // For real mode, ensure WebSocket connection
+          websocketService.connect();
+          toast.success('Real webhook mode activated - connect your VoIP system now!', { duration: 4000 });
+        } else {
+          // Demo mode
+          webhookService.startListening(companyId);
+          setIsListening(true);
+          toast.success('Demo webhook listener started - test call in 10 seconds!', { duration: 3000 });
+        }
       }
     } catch (error) {
       console.error('Failed to toggle webhook listener:', error);
@@ -79,11 +109,11 @@ function WebhookSettings() {
         setIsSimulating(false);
         toast.success('Call simulation stopped', { duration: 2000 });
       } else {
-        if (!isListening) {
+        if (!isListening && !isRealMode) {
           toast.error('Please start webhook listener first');
           return;
         }
-        
+
         const companyId = getUserCompanyId();
         webhookService.startRandomSimulation(companyId);
         setIsSimulating(true);
@@ -100,6 +130,7 @@ function WebhookSettings() {
       await navigator.clipboard.writeText(webhookUrl);
       setCopied(true);
       toast.success('Webhook URL copied to clipboard!', { duration: 2000 });
+      
       // Reset copied state after 3 seconds
       setTimeout(() => setCopied(false), 3000);
     } catch (error) {
@@ -108,16 +139,42 @@ function WebhookSettings() {
     }
   };
 
-  const testWebhook = () => {
-    if (!isListening) {
-      toast.error('Please start webhook listener first');
-      return;
+  const testWebhook = async () => {
+    try {
+      const companyId = getUserCompanyId();
+      
+      if (isRealMode) {
+        // Test real webhook endpoint
+        const response = await fetch(`/api/webhook/test/${companyId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          toast.success('Real webhook test successful!', { duration: 2000 });
+        } else {
+          toast.error('Real webhook test failed');
+        }
+      } else {
+        // Demo mode test
+        if (!isListening) {
+          toast.error('Please start webhook listener first');
+          return;
+        }
+        
+        webhookService.sendTestCall(companyId);
+        toast.success('Demo test webhook call sent!', { duration: 2000 });
+      }
+      
+      loadWebhookStats();
+    } catch (error) {
+      console.error('Webhook test failed:', error);
+      toast.error('Webhook test failed');
     }
-
-    const companyId = getUserCompanyId();
-    webhookService.sendTestCall(companyId);
-    toast.success('Test webhook call sent!', { duration: 2000 });
-    loadWebhookStats();
   };
 
   return (
@@ -132,37 +189,94 @@ function WebhookSettings() {
               </p>
             </div>
 
-            {/* Status Indicators */}
-            <div className="flex items-center space-x-3">
-              {/* Listener Status */}
-              <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
-                isListening ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-              }`}>
-                <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                <span>{isListening ? 'Listening' : 'Stopped'}</span>
+            {/* Mode Toggle */}
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">Demo</span>
+                <button
+                  onClick={toggleMode}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    isRealMode ? 'bg-green-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      isRealMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-sm text-gray-600">Real</span>
               </div>
 
-              {/* Simulation Status */}
-              {isSimulating && (
-                <div className="flex items-center space-x-2 px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
-                  <SafeIcon icon={FiActivity} className="w-3 h-3 animate-pulse" />
-                  <span>Simulating</span>
+              {/* Status Indicators */}
+              <div className="flex items-center space-x-3">
+                {/* Connection Status */}
+                <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
+                  isRealMode 
+                    ? (connectionStatus?.isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800')
+                    : (isListening ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800')
+                }`}>
+                  <div className={`w-2 h-2 rounded-full ${
+                    isRealMode
+                      ? (connectionStatus?.isConnected ? 'bg-green-500' : 'bg-red-500')
+                      : (isListening ? 'bg-blue-500' : 'bg-gray-400')
+                  }`}></div>
+                  <span>
+                    {isRealMode 
+                      ? (connectionStatus?.isConnected ? 'Connected' : 'Disconnected')
+                      : (isListening ? 'Demo Active' : 'Demo Stopped')
+                    }
+                  </span>
+                  {isRealMode && connectionStatus?.isConnected && (
+                    <SafeIcon icon={FiWifi} className="w-3 h-3" />
+                  )}
                 </div>
-              )}
 
-              {/* Control Buttons */}
-              <button
-                onClick={toggleWebhookListener}
-                className={`inline-flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isListening 
-                    ? 'bg-red-600 hover:bg-red-700 text-white' 
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                }`}
-              >
-                <SafeIcon icon={isListening ? FiStop : FiPlay} className="w-4 h-4" />
-                <span>{isListening ? 'Stop Listener' : 'Start Listener'}</span>
-              </button>
+                {/* Simulation Status */}
+                {isSimulating && (
+                  <div className="flex items-center space-x-2 px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-800">
+                    <SafeIcon icon={FiActivity} className="w-3 h-3 animate-pulse" />
+                    <span>Simulating</span>
+                  </div>
+                )}
+
+                {/* Control Button */}
+                <button
+                  onClick={toggleWebhookListener}
+                  className={`inline-flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    (isListening || (isRealMode && connectionStatus?.isConnected))
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-green-600 hover:bg-green-700 text-white'
+                  }`}
+                >
+                  <SafeIcon icon={(isListening || (isRealMode && connectionStatus?.isConnected)) ? FiStop : FiPlay} className="w-4 h-4" />
+                  <span>
+                    {isRealMode 
+                      ? (connectionStatus?.isConnected ? 'Disconnect' : 'Connect')
+                      : (isListening ? 'Stop Demo' : 'Start Demo')
+                    }
+                  </span>
+                </button>
+              </div>
             </div>
+          </div>
+
+          {/* Mode Information */}
+          <div className={`mb-6 border rounded-lg p-4 ${
+            isRealMode ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'
+          }`}>
+            <div className="flex items-center space-x-2 mb-2">
+              <SafeIcon icon={isRealMode ? FiWifi : FiActivity} className="h-5 w-5 text-blue-600" />
+              <h4 className="text-sm font-medium text-blue-900">
+                {isRealMode ? '🌐 Real Webhook Mode' : '🎭 Demo Simulation Mode'}
+              </h4>
+            </div>
+            <p className="text-sm text-blue-700">
+              {isRealMode 
+                ? 'Ready to receive real webhook calls from your VoIP system. Configure your PBX to send POST requests to the URL below.'
+                : 'Demo mode with simulated calls for testing. Switch to Real mode when ready for production.'
+              }
+            </p>
           </div>
 
           {/* Webhook Statistics */}
@@ -209,7 +323,10 @@ function WebhookSettings() {
               Your Webhook Endpoint URL
             </label>
             <p className="text-sm text-gray-500 mb-3">
-              Configure your VoIP system to send POST requests to this URL when calls are received.
+              {isRealMode 
+                ? 'Configure your VoIP system to send POST requests to this URL when calls are received.'
+                : 'Demo URL for testing webhook functionality.'
+              }
             </p>
             <div className="flex space-x-2">
               <div className="flex-1 relative">
@@ -246,63 +363,39 @@ function WebhookSettings() {
               </p>
               <button
                 onClick={testWebhook}
-                disabled={!isListening}
-                className="inline-flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 <SafeIcon icon={FiSettings} className="w-4 h-4" />
                 <span>Send Test Call Now</span>
               </button>
-              {!isListening && (
-                <p className="mt-2 text-sm text-red-600">
-                  Start the webhook listener first to test.
-                </p>
-              )}
             </div>
 
             {/* Random Simulation */}
-            <div className="border border-gray-200 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-gray-900 mb-2">Random Call Simulation</h4>
-              <p className="text-sm text-gray-500 mb-3">
-                Simulate incoming calls every 1-3 minutes for testing.
-              </p>
-              <button
-                onClick={toggleSimulation}
-                disabled={!isListening}
-                className={`inline-flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  isSimulating
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                }`}
-              >
-                <SafeIcon icon={isSimulating ? FiStop : FiPlay} className="w-4 h-4" />
-                <span>{isSimulating ? 'Stop Simulation' : 'Start Simulation'}</span>
-              </button>
-              {!isListening && (
-                <p className="mt-2 text-sm text-red-600">
-                  Start the webhook listener first.
+            {!isRealMode && (
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Random Call Simulation</h4>
+                <p className="text-sm text-gray-500 mb-3">
+                  Simulate incoming calls every 1-3 minutes for testing.
                 </p>
-              )}
-            </div>
-          </div>
-
-          {/* Step-by-step Instructions */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <div className="flex">
-              <SafeIcon icon={FiInfo} className="h-5 w-5 text-blue-400 mt-0.5" />
-              <div className="ml-3">
-                <h4 className="text-sm font-medium text-blue-900 mb-2">
-                  Quick Testing Steps
-                </h4>
-                <div className="text-sm text-blue-700">
-                  <ol className="list-decimal list-inside space-y-1">
-                    <li><strong>Start Listener:</strong> Click "Start Listener" - you'll get a test call in 10 seconds</li>
-                    <li><strong>Enable Simulation:</strong> Click "Start Simulation" for random calls every 1-3 minutes</li>
-                    <li><strong>Manual Test:</strong> Use "Send Test Call Now" for immediate testing</li>
-                    <li><strong>Answer Calls:</strong> When a call appears, test the address management features</li>
-                  </ol>
-                </div>
+                <button
+                  onClick={toggleSimulation}
+                  disabled={!isListening && !isRealMode}
+                  className={`inline-flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isSimulating 
+                      ? 'bg-red-600 hover:bg-red-700 text-white' 
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  <SafeIcon icon={isSimulating ? FiStop : FiPlay} className="w-4 h-4" />
+                  <span>{isSimulating ? 'Stop Simulation' : 'Start Simulation'}</span>
+                </button>
+                {!isListening && !isRealMode && (
+                  <p className="mt-2 text-sm text-red-600">
+                    Start the webhook listener first.
+                  </p>
+                )}
               </div>
-            </div>
+            )}
           </div>
 
           {/* Integration Documentation */}
@@ -342,18 +435,25 @@ function WebhookSettings() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  Webhook Listener
+                  Mode
                 </label>
-                <p className={`mt-1 text-sm ${isListening ? 'text-green-600' : 'text-red-600'}`}>
-                  {isListening ? '✅ Active - Ready to receive calls' : '❌ Stopped'}
+                <p className={`mt-1 text-sm ${isRealMode ? 'text-green-600' : 'text-blue-600'}`}>
+                  {isRealMode ? '🌐 Real Webhook Mode' : '🎭 Demo Mode'}
                 </p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  Call Simulation
+                  Connection
                 </label>
-                <p className={`mt-1 text-sm ${isSimulating ? 'text-blue-600' : 'text-gray-600'}`}>
-                  {isSimulating ? '🎭 Active - Generating test calls' : '⏸️ Inactive'}
+                <p className={`mt-1 text-sm ${
+                  isRealMode 
+                    ? (connectionStatus?.isConnected ? 'text-green-600' : 'text-red-600')
+                    : (isListening ? 'text-blue-600' : 'text-gray-600')
+                }`}>
+                  {isRealMode 
+                    ? (connectionStatus?.isConnected ? '✅ Ready for real calls' : '❌ Not connected')
+                    : (isListening ? '✅ Demo active' : '⏸️ Demo stopped')
+                  }
                 </p>
               </div>
               <div>

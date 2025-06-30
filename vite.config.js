@@ -10,8 +10,25 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src')
     }
   },
-   build: {
+  build: {
     outDir: 'dist',
-    sourcemap: true
+    sourcemap: false, // Disable sourcemaps for production
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          ui: ['framer-motion', 'react-hot-toast', 'react-hook-form'],
+          icons: ['react-icons']
+        }
+      }
+    }
   },
+  server: {
+    port: 5173,
+    host: true
+  },
+  preview: {
+    port: 4173,
+    host: true
+  }
 });
