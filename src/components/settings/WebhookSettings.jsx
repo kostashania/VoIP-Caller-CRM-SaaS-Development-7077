@@ -9,8 +9,9 @@ import { webhookService } from '../../services/webhookService';
 import { websocketService } from '../../services/websocketService';
 import WebhookLogs from './WebhookLogs';
 import RealWebhookTesting from './RealWebhookTesting';
+import WebhookTester from './WebhookTester';
 
-const { FiGlobe, FiSettings, FiPlay, FiStop, FiCopy, FiCheckCircle, FiAlertCircle, FiInfo, FiLink, FiActivity, FiClock, FiPhone, FiWifi, FiList, FiExternalLink, FiTarget } = FiIcons;
+const { FiGlobe, FiSettings, FiPlay, FiStop, FiCopy, FiCheckCircle, FiAlertCircle, FiInfo, FiLink, FiActivity, FiClock, FiPhone, FiWifi, FiList, FiExternalLink, FiTarget, FiTerminal } = FiIcons;
 
 function WebhookSettings() {
   const [isListening, setIsListening] = useState(false);
@@ -24,16 +25,15 @@ function WebhookSettings() {
     todayReceived: 0,
     lastReceived: null
   });
-  const [activeTab, setActiveTab] = useState('settings'); // 'settings', 'logs', or 'real'
+  const [activeTab, setActiveTab] = useState('tester'); // 'tester', 'settings', 'logs', or 'real'
   const { getUserCompanyId } = useAuthStore();
 
   // Production webhook URL - you can change this based on your deployment
   const getProductionWebhookUrl = (companyId) => {
     // Check if we're on Netlify or local development
-    const baseUrl = window.location.hostname.includes('netlify.app')
+    const baseUrl = window.location.hostname.includes('netlify.app') 
       ? 'https://relaxed-manatee-580f4b.netlify.app'
       : window.location.origin;
-    
     return `${baseUrl}/api/webhook/incoming-call/${companyId}`;
   };
 
@@ -60,7 +60,6 @@ function WebhookSettings() {
       setIsListening(webhookService.getListeningStatus());
       setIsSimulating(webhookService.getSimulationStatus());
       loadWebhookStats();
-
       const wsStatus = websocketService.getConnectionStatus();
       setConnectionStatus(wsStatus);
     }, 5000);
@@ -87,7 +86,10 @@ function WebhookSettings() {
     // If switching to demo mode, disable WebSocket
     if (!newRealMode) {
       websocketService.disable();
-      setConnectionStatus({ isConnected: false, isEnabled: false });
+      setConnectionStatus({
+        isConnected: false,
+        isEnabled: false
+      });
     }
   };
 
@@ -114,7 +116,6 @@ function WebhookSettings() {
           // We'll rely on the server endpoint at /api/webhook/incoming-call/:companyId
           webhookService.startListening(companyId);
           setIsListening(true);
-          
           toast.success('Real webhook mode activated - ready to receive calls!', { duration: 4000 });
           
           // Show additional info about the production URL
@@ -162,7 +163,6 @@ function WebhookSettings() {
       await navigator.clipboard.writeText(webhookUrl);
       setCopied(true);
       toast.success('Webhook URL copied to clipboard!', { duration: 2000 });
-      
       // Reset copied state after 3 seconds
       setTimeout(() => setCopied(false), 3000);
     } catch (error) {
@@ -231,7 +231,7 @@ function WebhookSettings() {
       const testUrl = getProductionWebhookUrl(companyId);
       
       toast.info('Testing production webhook endpoint...', { duration: 2000 });
-
+      
       const response = await fetch(testUrl, {
         method: 'POST',
         headers: {
@@ -270,10 +270,27 @@ function WebhookSettings() {
       <div className="border-b border-gray-200">
         <nav className="flex space-x-8">
           <button
+            onClick={() => setActiveTab('tester')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'tester' 
+                ? 'border-primary-500 text-primary-600' 
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center space-x-2">
+              <SafeIcon icon={FiTerminal} className="w-4 h-4" />
+              <span>🧪 Webhook Tester</span>
+              <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-bold">
+                NEW
+              </span>
+            </div>
+          </button>
+          
+          <button
             onClick={() => setActiveTab('settings')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'settings'
-                ? 'border-primary-500 text-primary-600'
+              activeTab === 'settings' 
+                ? 'border-primary-500 text-primary-600' 
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -286,8 +303,8 @@ function WebhookSettings() {
           <button
             onClick={() => setActiveTab('real')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'real'
-                ? 'border-primary-500 text-primary-600'
+              activeTab === 'real' 
+                ? 'border-primary-500 text-primary-600' 
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -303,8 +320,8 @@ function WebhookSettings() {
           <button
             onClick={() => setActiveTab('logs')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'logs'
-                ? 'border-primary-500 text-primary-600'
+              activeTab === 'logs' 
+                ? 'border-primary-500 text-primary-600' 
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -320,7 +337,9 @@ function WebhookSettings() {
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'real' ? (
+      {activeTab === 'tester' ? (
+        <WebhookTester />
+      ) : activeTab === 'real' ? (
         <RealWebhookTesting />
       ) : activeTab === 'settings' ? (
         <div className="bg-white shadow rounded-lg">
@@ -356,26 +375,25 @@ function WebhookSettings() {
                 <div className="flex items-center space-x-3">
                   {/* Connection Status */}
                   <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
-                    isRealMode && isListening
-                      ? 'bg-green-100 text-green-800'
+                    isRealMode && isListening 
+                      ? 'bg-green-100 text-green-800' 
                       : isListening 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-gray-100 text-gray-800'
+                      ? 'bg-blue-100 text-blue-800' 
+                      : 'bg-gray-100 text-gray-800'
                   }`}>
                     <div className={`w-2 h-2 rounded-full ${
-                      isRealMode && isListening
-                        ? 'bg-green-500'
+                      isRealMode && isListening 
+                        ? 'bg-green-500' 
                         : isListening 
-                          ? 'bg-blue-500' 
-                          : 'bg-gray-400'
+                        ? 'bg-blue-500' 
+                        : 'bg-gray-400'
                     }`}></div>
                     <span>
-                      {isRealMode && isListening
-                        ? 'Production Ready'
+                      {isRealMode && isListening 
+                        ? 'Production Ready' 
                         : isListening 
-                          ? 'Demo Active' 
-                          : 'Not Active'
-                      }
+                        ? 'Demo Active' 
+                        : 'Not Active'}
                     </span>
                     {isRealMode && isListening && (
                       <SafeIcon icon={FiExternalLink} className="w-3 h-3" />
@@ -394,17 +412,14 @@ function WebhookSettings() {
                   <button
                     onClick={toggleWebhookListener}
                     className={`inline-flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActivelyConnected
-                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                      isActivelyConnected 
+                        ? 'bg-red-600 hover:bg-red-700 text-white' 
                         : 'bg-green-600 hover:bg-green-700 text-white'
                     }`}
                   >
                     <SafeIcon icon={isActivelyConnected ? FiStop : FiPlay} className="w-4 h-4" />
                     <span>
-                      {isActivelyConnected 
-                        ? 'Stop' 
-                        : (isRealMode ? 'Start Production' : 'Start Demo')
-                      }
+                      {isActivelyConnected ? 'Stop' : (isRealMode ? 'Start Production' : 'Start Demo')}
                     </span>
                   </button>
                 </div>
@@ -468,9 +483,8 @@ function WebhookSettings() {
                     <p className="text-sm font-medium text-purple-900">Last Received</p>
                     <p className="text-sm font-medium text-purple-600">
                       {webhookStats.lastReceived 
-                        ? new Date(webhookStats.lastReceived).toLocaleTimeString()
-                        : 'Never'
-                      }
+                        ? new Date(webhookStats.lastReceived).toLocaleTimeString() 
+                        : 'Never'}
                     </p>
                   </div>
                 </div>
@@ -563,8 +577,8 @@ function WebhookSettings() {
                   onClick={toggleSimulation}
                   disabled={!isActivelyConnected}
                   className={`inline-flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    isSimulating
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                    isSimulating 
+                      ? 'bg-red-600 hover:bg-red-700 text-white' 
                       : 'bg-blue-600 hover:bg-blue-700 text-white'
                   }`}
                 >
@@ -606,7 +620,6 @@ function WebhookSettings() {
                     <p><strong>call_type:</strong> Type of call, usually "incoming" (optional)</p>
                     <p><strong>webhook_id:</strong> Unique identifier for this specific call (optional)</p>
                   </div>
-                  
                   {isRealMode && (
                     <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
                       <p className="text-sm font-medium text-green-800 mb-1">📞 Production Webhook URL:</p>
@@ -642,15 +655,14 @@ function WebhookSettings() {
                     isRealMode && isListening 
                       ? 'text-green-600' 
                       : isListening 
-                        ? 'text-blue-600' 
-                        : 'text-gray-600'
+                      ? 'text-blue-600' 
+                      : 'text-gray-600'
                   }`}>
                     {isRealMode && isListening 
                       ? '✅ Ready for real calls' 
                       : isListening 
-                        ? '✅ Demo active' 
-                        : '⏸️ Not active'
-                    }
+                      ? '✅ Demo active' 
+                      : '⏸️ Not active'}
                   </p>
                 </div>
                 <div>

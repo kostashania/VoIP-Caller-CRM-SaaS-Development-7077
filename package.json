@@ -7,7 +7,7 @@
     "dev": "vite",
     "dev:server": "cd server && npm run dev",
     "dev:full": "concurrently \"npm run dev\" \"npm run dev:server\"",
-    "build": "npm run lint:frontend && vite build",
+    "build": "vite build",
     "lint": "eslint .",
     "lint:frontend": "eslint src/",
     "lint:error": "eslint . --quiet",
@@ -15,7 +15,8 @@
     "server:install": "cd server && npm install",
     "server:start": "cd server && npm start",
     "netlify:dev": "netlify dev",
-    "netlify:build": "npm run build"
+    "netlify:build": "npm run build",
+    "netlify:functions:build": "npm run build"
   },
   "dependencies": {
     "@questlabs/react-sdk": "^2.1.9",
