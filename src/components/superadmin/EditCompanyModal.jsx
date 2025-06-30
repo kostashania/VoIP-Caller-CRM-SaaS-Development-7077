@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -6,45 +6,44 @@ import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { companiesAPI } from '../../services/supabaseAPI';
 
-const { FiX, FiBriefcase, FiCalendar, FiUser, FiMail, FiLock, FiEye, FiEyeOff } = FiIcons;
+const { FiX, FiBriefcase, FiCalendar } = FiIcons;
 
-function AddCompanyModal({ isOpen, onClose, onSuccess }) {
+function EditCompanyModal({ isOpen, onClose, onSuccess, company }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
-    watch
+    setValue
   } = useForm();
 
-  const password = watch('adminPassword');
+  useEffect(() => {
+    if (company) {
+      setValue('name', company.name);
+      setValue('subscriptionStart', company.subscription_start);
+      setValue('subscriptionEnd', company.subscription_end);
+    }
+  }, [company, setValue]);
 
   const onSubmit = async (data) => {
     try {
       setIsSubmitting(true);
-      console.log('🚀 Submitting company creation form with data:', {
-        ...data,
-        adminPassword: '[HIDDEN]'
-      });
+      console.log('🚀 Updating company with data:', data);
       
-      const result = await companiesAPI.create({
+      await companiesAPI.update(company.id, {
         name: data.name,
-        subscriptionStart: data.subscriptionStart,
-        subscriptionEnd: data.subscriptionEnd,
-        adminName: data.adminName,
-        adminEmail: data.adminEmail,
-        adminPassword: data.adminPassword || 'admin123' // Default password if not provided
+        subscription_start: data.subscriptionStart,
+        subscription_end: data.subscriptionEnd
       });
       
-      console.log('✅ Company created successfully:', result);
-      toast.success('Company and admin user created successfully!', { duration: 3000 });
+      console.log('✅ Company updated successfully');
+      toast.success('Company updated successfully!', { duration: 3000 });
       reset();
       onSuccess(); // Call the success callback
     } catch (error) {
-      console.error('❌ Failed to add company:', error);
-      toast.error(error.message || 'Failed to add company', { duration: 4000 });
+      console.error('❌ Failed to update company:', error);
+      toast.error(error.message || 'Failed to update company', { duration: 4000 });
     } finally {
       setIsSubmitting(false);
     }
@@ -57,11 +56,7 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
     }
   };
 
-  // Set default dates
-  const today = new Date().toISOString().split('T')[0];
-  const nextYear = new Date();
-  nextYear.setFullYear(nextYear.getFullYear() + 1);
-  const defaultEndDate = nextYear.toISOString().split('T')[0];
+  if (!company) return null;
 
   return (
     <AnimatePresence>
@@ -86,7 +81,7 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
             >
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-medium text-gray-900">Add New Company</h3>
+                <h3 className="text-lg font-medium text-gray-900">Edit Company</h3>
                 <button
                   onClick={handleClose}
                   disabled={isSubmitting}
@@ -127,7 +122,7 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
 
                 {/* Subscription Details */}
                 <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Subscription</h4>
+                  <h4 className="text-md font-medium text-gray-900 mb-4">Subscription Period</h4>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -140,7 +135,6 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                         <input
                           {...register('subscriptionStart', { required: 'Start date is required' })}
                           type="date"
-                          defaultValue={today}
                           disabled={isSubmitting}
                           className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
                         />
@@ -161,7 +155,6 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                         <input
                           {...register('subscriptionEnd', { required: 'End date is required' })}
                           type="date"
-                          defaultValue={defaultEndDate}
                           disabled={isSubmitting}
                           className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
                         />
@@ -169,99 +162,6 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                       {errors.subscriptionEnd && (
                         <p className="mt-1 text-sm text-red-600">{errors.subscriptionEnd.message}</p>
                       )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Admin User */}
-                <div>
-                  <h4 className="text-md font-medium text-gray-900 mb-4">Company Admin</h4>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Admin Name *
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <SafeIcon icon={FiUser} className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <input
-                          {...register('adminName', { required: 'Admin name is required' })}
-                          type="text"
-                          disabled={isSubmitting}
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
-                          placeholder="Enter admin full name"
-                        />
-                      </div>
-                      {errors.adminName && (
-                        <p className="mt-1 text-sm text-red-600">{errors.adminName.message}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Admin Email *
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <SafeIcon icon={FiMail} className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <input
-                          {...register('adminEmail', {
-                            required: 'Admin email is required',
-                            pattern: {
-                              value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                              message: 'Invalid email address'
-                            }
-                          })}
-                          type="email"
-                          disabled={isSubmitting}
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
-                          placeholder="Enter admin email"
-                        />
-                      </div>
-                      {errors.adminEmail && (
-                        <p className="mt-1 text-sm text-red-600">{errors.adminEmail.message}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Admin Password
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <SafeIcon icon={FiLock} className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <input
-                          {...register('adminPassword', {
-                            minLength: {
-                              value: 6,
-                              message: 'Password must be at least 6 characters'
-                            }
-                          })}
-                          type={showPassword ? 'text' : 'password'}
-                          disabled={isSubmitting}
-                          className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
-                          placeholder="Enter admin password (default: admin123)"
-                        />
-                        <button
-                          type="button"
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          <SafeIcon 
-                            icon={showPassword ? FiEyeOff : FiEye} 
-                            className="h-5 w-5 text-gray-400 hover:text-gray-600" 
-                          />
-                        </button>
-                      </div>
-                      {errors.adminPassword && (
-                        <p className="mt-1 text-sm text-red-600">{errors.adminPassword.message}</p>
-                      )}
-                      <p className="mt-1 text-xs text-gray-500">
-                        If left empty, default password "admin123" will be used. Admin can change it later.
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -284,10 +184,10 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                     {isSubmitting ? (
                       <div className="flex items-center justify-center space-x-2">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>Creating...</span>
+                        <span>Updating...</span>
                       </div>
                     ) : (
-                      'Add Company'
+                      'Update Company'
                     )}
                   </button>
                 </div>
@@ -300,4 +200,4 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
   );
 }
 
-export default AddCompanyModal;
+export default EditCompanyModal;

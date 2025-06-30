@@ -13,11 +13,21 @@ function StatsCards({ calls }) {
     call.timestamp.startsWith(todayString)
   );
   
-  const answeredCalls = calls.filter(call => call.call_status === 'answered');
-  const missedCalls = calls.filter(call => call.call_status === 'missed');
+  const answeredCalls = calls.filter(call => 
+    call.call_status === 'answered'
+  );
   
-  const totalDuration = answeredCalls.reduce((sum, call) => sum + (call.duration_sec || 0), 0);
-  const avgDuration = answeredCalls.length > 0 ? Math.round(totalDuration / answeredCalls.length) : 0;
+  const missedCalls = calls.filter(call => 
+    call.call_status === 'missed'
+  );
+  
+  const totalDuration = answeredCalls.reduce((sum, call) => 
+    sum + (call.duration_seconds || call.duration_sec || 0), 0
+  );
+  
+  const avgDuration = answeredCalls.length > 0 
+    ? Math.round(totalDuration / answeredCalls.length) 
+    : 0;
 
   const stats = [
     {

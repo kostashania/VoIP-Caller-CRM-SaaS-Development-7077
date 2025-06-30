@@ -14,12 +14,24 @@ export default [
         ...globals.browser,
         ...globals.node,
         React: true,
-        JSX: true
+        JSX: true,
+        console: true,
+        confirm: true,
+        window: true,
+        document: true,
+        setTimeout: true,
+        clearTimeout: true,
+        setInterval: true,
+        clearInterval: true,
+        navigator: true,
+        URL: true
       },
       parserOptions: {
-        ecmaFeatures: { jsx: true },
-        sourceType: 'module'
-      }
+        ecmaFeatures: {
+          jsx: true,
+        },
+        sourceType: 'module',
+      },
     },
     plugins: {
       'react-hooks': reactHooks,
@@ -32,7 +44,7 @@ export default [
       'react-refresh/only-export-components': 'off',
       'no-unused-vars': 'off',
       'no-case-declarations': 'off',
-      'no-useless-catch': 'off'
+      'no-useless-catch': 'off',
     },
-  }
+  },
 ];

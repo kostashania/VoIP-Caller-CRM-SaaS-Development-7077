@@ -31,8 +31,7 @@ export const authAPI = {
       const { data: userData, error: userError } = await supabase
         .from('users_crm_8x9p2k')
         .select(`
-          *,
-          company:companies_crm_8x9p2k(*)
+          *
         `)
         .eq('email', email)
         .eq('is_active', true)
@@ -40,6 +39,20 @@ export const authAPI = {
 
       if (userError || !userData) {
         throw new Error('Invalid email address. User not found.');
+      }
+
+      // Get company data separately if user has company_id
+      let companyData = null;
+      if (userData.company_id) {
+        const { data: company, error: companyError } = await supabase
+          .from('companies_crm_8x9p2k')
+          .select('*')
+          .eq('id', userData.company_id)
+          .single();
+
+        if (!companyError && company) {
+          companyData = company;
+        }
       }
 
       console.log('Login successful for user:', userData);
@@ -54,7 +67,7 @@ export const authAPI = {
           name: userData.name,
           role: userData.role,
           company_id: userData.company_id,
-          company: userData.company
+          company: companyData
         },
         token: `supabase-token-${userData.id}`
       };
@@ -77,7 +90,7 @@ export const sipAPI = {
         .from('sip_configurations_crm_8x9p2k')
         .select('*')
         .eq('company_id', companyId)
-        .maybeSingle(); // Use maybeSingle instead of single
+        .maybeSingle();
 
       if (error) {
         console.error('Error getting SIP config:', error);
@@ -85,38 +98,31 @@ export const sipAPI = {
       }
 
       console.log('SIP config retrieved:', data);
-
       if (data && data.password_encrypted) {
-        // Decrypt password for use (in production, handle this securely)
         data.password = decryptPassword(data.password_encrypted);
       }
 
       return data || null;
     } catch (error) {
       console.error('Failed to get SIP config:', error);
-      return null; // Return null instead of throwing to prevent breaking the UI
+      return null;
     }
   },
 
   updateConfig: async (companyId, config) => {
     try {
       console.log('Updating SIP config for company:', companyId, 'with data:', config);
-
-      // Prepare config for storage
       const configToStore = { ...config };
 
-      // Always encrypt password if provided
       if (config.password && config.password.trim()) {
         configToStore.password_encrypted = encryptPassword(config.password);
-        delete configToStore.password; // Don't store plain password
+        delete configToStore.password;
         console.log('Password encrypted and will be saved');
       } else {
-        // If no password provided, don't update the password field
         delete configToStore.password;
         console.log('No password provided, keeping existing password');
       }
 
-      // First check if any record exists for this company
       const { data: existingRecords, error: checkError } = await supabase
         .from('sip_configurations_crm_8x9p2k')
         .select('*')
@@ -131,10 +137,8 @@ export const sipAPI = {
 
       let result;
       if (existingRecords && existingRecords.length > 0) {
-        // If multiple records exist, delete all but keep the first one's password if needed
         if (existingRecords.length > 1) {
           console.log('Multiple records found, cleaning up...');
-          // Keep the first record, delete the rest
           const recordToKeep = existingRecords[0];
           const recordsToDelete = existingRecords.slice(1);
 
@@ -147,14 +151,12 @@ export const sipAPI = {
           console.log(`Deleted ${recordsToDelete.length} duplicate records`);
         }
 
-        // Update the remaining record
         const recordToUpdate = existingRecords[0];
         const updateData = {
           ...configToStore,
           updated_at: new Date().toISOString()
         };
 
-        // If no new password provided, keep the existing encrypted password
         if (!config.password && recordToUpdate.password_encrypted) {
           updateData.password_encrypted = recordToUpdate.password_encrypted;
         }
@@ -165,7 +167,7 @@ export const sipAPI = {
           .update(updateData)
           .eq('id', recordToUpdate.id)
           .select()
-          .maybeSingle(); // Use maybeSingle instead of single
+          .maybeSingle();
 
         if (error) {
           console.error('Error updating SIP config:', error);
@@ -175,7 +177,6 @@ export const sipAPI = {
         result = data;
         console.log('SIP config updated successfully:', result);
       } else {
-        // Insert new record
         const insertData = {
           company_id: companyId,
           ...configToStore,
@@ -188,7 +189,7 @@ export const sipAPI = {
           .from('sip_configurations_crm_8x9p2k')
           .insert(insertData)
           .select()
-          .maybeSingle(); // Use maybeSingle instead of single
+          .maybeSingle();
 
         if (error) {
           console.error('Error creating SIP config:', error);
@@ -208,7 +209,6 @@ export const sipAPI = {
 
   updateTestStatus: async (companyId, testResult) => {
     try {
-      // Find the record first
       const { data: existing, error: findError } = await supabase
         .from('sip_configurations_crm_8x9p2k')
         .select('id')
@@ -236,26 +236,20 @@ export const sipAPI = {
       if (error) throw error;
     } catch (error) {
       console.error('Failed to update SIP test status:', error);
-      // Don't throw here as this is not critical
     }
   },
 
   testConnection: async (companyId, config) => {
     try {
-      // Simulate SIP connection test
       await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      const success = Math.random() > 0.2; // 80% success rate for demo
-      
+      const success = Math.random() > 0.2;
+
       const result = {
         success,
-        message: success 
-          ? 'SIP connection successful' 
-          : 'SIP connection failed: Invalid credentials or network error',
+        message: success ? 'SIP connection successful' : 'SIP connection failed: Invalid credentials or network error',
         tested_at: new Date().toISOString()
       };
 
-      // Update test results
       await sipAPI.updateTestStatus(companyId, {
         last_test_status: result.success ? 'success' : 'failed',
         last_test_at: result.tested_at
@@ -274,19 +268,12 @@ export const callLogsAPI = {
     try {
       console.log('Getting call logs for company:', companyId);
       
+      // First get call logs
       let query = supabase
         .from('call_logs_crm_8x9p2k')
-        .select(`
-          *,
-          caller:callers_crm_8x9p2k(
-            *,
-            addresses:addresses_crm_8x9p2k(*)
-          ),
-          selected_address:addresses_crm_8x9p2k(*)
-        `)
+        .select('*')
         .eq('company_id', companyId);
 
-      // Apply filters
       if (filters.status) {
         query = query.eq('call_status', filters.status);
       }
@@ -300,15 +287,72 @@ export const callLogsAPI = {
         query = query.lte('timestamp', filters.to_date);
       }
 
-      const { data, error } = await query.order('timestamp', { ascending: false });
+      const { data: callLogs, error } = await query.order('timestamp', { ascending: false });
 
       if (error) {
         console.error('Error getting call logs:', error);
         throw error;
       }
 
-      console.log('Call logs retrieved:', data?.length || 0);
-      return data || [];
+      console.log('Call logs retrieved:', callLogs?.length || 0);
+
+      // Now get callers and addresses for each call that has a caller_id
+      const enrichedCallLogs = await Promise.all(
+        (callLogs || []).map(async (callLog) => {
+          if (!callLog.caller_id) {
+            return callLog;
+          }
+
+          try {
+            // Get caller data
+            const { data: caller, error: callerError } = await supabase
+              .from('callers_crm_8x9p2k')
+              .select('*')
+              .eq('id', callLog.caller_id)
+              .single();
+
+            if (callerError) {
+              console.warn('Could not fetch caller for call log:', callLog.id);
+              return callLog;
+            }
+
+            // Get addresses for this caller
+            const { data: addresses, error: addressError } = await supabase
+              .from('addresses_crm_8x9p2k')
+              .select('*')
+              .eq('caller_id', caller.id);
+
+            if (!addressError && addresses) {
+              caller.addresses = addresses;
+            }
+
+            // Get selected address if available
+            let selectedAddress = null;
+            if (callLog.selected_address_id) {
+              const { data: selAddr, error: selAddrError } = await supabase
+                .from('addresses_crm_8x9p2k')
+                .select('*')
+                .eq('id', callLog.selected_address_id)
+                .single();
+
+              if (!selAddrError && selAddr) {
+                selectedAddress = selAddr;
+              }
+            }
+
+            return {
+              ...callLog,
+              caller,
+              selected_address: selectedAddress
+            };
+          } catch (error) {
+            console.warn('Error enriching call log:', callLog.id, error);
+            return callLog;
+          }
+        })
+      );
+
+      return enrichedCallLogs;
     } catch (error) {
       console.error('Failed to get call logs:', error);
       handleSupabaseError(error, 'Get call logs');
@@ -318,17 +362,10 @@ export const callLogsAPI = {
   create: async (callData) => {
     try {
       console.log('Creating call log with data:', callData);
-      
       const { data, error } = await supabase
         .from('call_logs_crm_8x9p2k')
         .insert(callData)
-        .select(`
-          *,
-          caller:callers_crm_8x9p2k(
-            *,
-            addresses:addresses_crm_8x9p2k(*)
-          )
-        `)
+        .select('*')
         .single();
 
       if (error) {
@@ -347,7 +384,6 @@ export const callLogsAPI = {
   updateStatus: async (id, status, metadata = {}) => {
     try {
       console.log('Updating call log status:', { id, status, metadata });
-      
       const { data, error } = await supabase
         .from('call_logs_crm_8x9p2k')
         .update({
@@ -355,14 +391,7 @@ export const callLogsAPI = {
           ...metadata
         })
         .eq('id', id)
-        .select(`
-          *,
-          caller:callers_crm_8x9p2k(
-            *,
-            addresses:addresses_crm_8x9p2k(*)
-          ),
-          selected_address:addresses_crm_8x9p2k(*)
-        `)
+        .select('*')
         .single();
 
       if (error) {
@@ -397,15 +426,11 @@ export const callLogsAPI = {
   setSelectedAddress: async (id, addressId) => {
     try {
       console.log('Setting selected address for call:', { id, addressId });
-      
       const { data, error } = await supabase
         .from('call_logs_crm_8x9p2k')
         .update({ selected_address_id: addressId })
         .eq('id', id)
-        .select(`
-          *,
-          selected_address:addresses_crm_8x9p2k(*)
-        `)
+        .select('*')
         .single();
 
       if (error) {
@@ -442,88 +467,135 @@ export const callLogsAPI = {
 export const companiesAPI = {
   getAll: async () => {
     try {
-      console.log('Getting all companies...');
-      
-      const { data, error } = await supabase
+      console.log('🔍 Getting all companies...');
+      const { data: companies, error: companiesError } = await supabase
         .from('companies_crm_8x9p2k')
-        .select(`
-          *,
-          voip_settings:voip_settings_crm_8x9p2k(*),
-          sip_config:sip_configurations_crm_8x9p2k(*),
-          user_count:users_crm_8x9p2k(count)
-        `)
+        .select('*')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error getting companies:', error);
-        throw error;
+      if (companiesError) {
+        console.error('❌ Error getting companies:', companiesError);
+        throw companiesError;
       }
 
-      console.log('Companies retrieved:', data?.length || 0);
-      return data || [];
+      console.log('✅ Companies retrieved:', companies?.length || 0, companies);
+
+      // Get user counts for each company
+      const companiesWithCounts = await Promise.all(
+        (companies || []).map(async (company) => {
+          try {
+            const { count, error: countError } = await supabase
+              .from('users_crm_8x9p2k')
+              .select('*', { count: 'exact' })
+              .eq('company_id', company.id)
+              .eq('is_active', true);
+
+            if (countError) {
+              console.warn('Warning: Could not get user count for company', company.id, countError);
+            }
+
+            return {
+              ...company,
+              user_count: count || 0
+            };
+          } catch (error) {
+            console.warn('Warning: Error getting user count for company', company.id, error);
+            return {
+              ...company,
+              user_count: 0
+            };
+          }
+        })
+      );
+
+      console.log('✅ Companies with user counts:', companiesWithCounts);
+      return companiesWithCounts;
     } catch (error) {
-      console.error('Failed to get companies:', error);
+      console.error('❌ Failed to get companies:', error);
       handleSupabaseError(error, 'Get companies');
     }
   },
 
   create: async (companyData) => {
     try {
-      console.log('Creating company with data:', companyData);
-      
-      // Create company
+      console.log('🚀 Creating company with data:', companyData);
+
+      // Step 1: Create company
+      const companyInsertData = {
+        name: companyData.name,
+        subscription_start: companyData.subscriptionStart,
+        subscription_end: companyData.subscriptionEnd,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('📝 Inserting company data:', companyInsertData);
       const { data: company, error: companyError } = await supabase
         .from('companies_crm_8x9p2k')
-        .insert({
-          name: companyData.name,
-          subscription_start: companyData.subscriptionStart,
-          subscription_end: companyData.subscriptionEnd,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
+        .insert(companyInsertData)
         .select()
         .single();
 
       if (companyError) {
-        console.error('Error creating company:', companyError);
-        throw companyError;
+        console.error('❌ Error creating company:', companyError);
+        throw new Error(`Failed to create company: ${companyError.message}`);
       }
 
-      console.log('Company created successfully:', company);
+      console.log('✅ Company created successfully:', company);
 
-      // Create admin user
+      // Step 2: Create admin user
+      const userInsertData = {
+        email: companyData.adminEmail,
+        name: companyData.adminName,
+        role: 'admin',
+        company_id: company.id,
+        password_hash: companyData.adminPassword ? encryptPassword(companyData.adminPassword) : encryptPassword('admin123'),
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('📝 Creating admin user with data:', { ...userInsertData, password_hash: '[ENCRYPTED]' });
       const { data: adminUser, error: userError } = await supabase
         .from('users_crm_8x9p2k')
-        .insert({
-          email: companyData.adminEmail,
-          name: companyData.adminName,
-          role: 'admin',
-          company_id: company.id,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
+        .insert(userInsertData)
         .select()
         .single();
 
       if (userError) {
-        console.error('Error creating admin user:', userError);
-        throw userError;
+        console.error('❌ Error creating admin user:', userError);
+        // Try to clean up the company if user creation fails
+        await supabase
+          .from('companies_crm_8x9p2k')
+          .delete()
+          .eq('id', company.id);
+        throw new Error(`Failed to create admin user: ${userError.message}`);
       }
 
-      console.log('Admin user created successfully:', adminUser);
+      console.log('✅ Admin user created successfully:', { ...adminUser, password_hash: '[ENCRYPTED]' });
 
-      return { company, adminUser };
+      // Return both company and admin user
+      const result = {
+        company: company,
+        adminUser: {
+          ...adminUser,
+          password_hash: undefined // Don't return the hash
+        }
+      };
+
+      console.log('🎉 Company creation completed successfully:', result);
+      return result;
     } catch (error) {
-      console.error('Failed to create company:', error);
-      handleSupabaseError(error, 'Create company');
+      console.error('💥 Failed to create company:', error);
+      throw new Error(error.message || 'Failed to create company');
     }
   },
 
   update: async (id, companyData) => {
     try {
+      console.log('📝 Updating company:', id, 'with data:', companyData);
       const { data, error } = await supabase
         .from('companies_crm_8x9p2k')
         .update({
@@ -534,22 +606,35 @@ export const companiesAPI = {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error updating company:', error);
+        throw error;
+      }
+
+      console.log('✅ Company updated successfully:', data);
       return data;
     } catch (error) {
+      console.error('💥 Failed to update company:', error);
       handleSupabaseError(error, 'Update company');
     }
   },
 
   delete: async (id) => {
     try {
+      console.log('🗑️ Deleting company:', id);
       const { error } = await supabase
         .from('companies_crm_8x9p2k')
         .update({ is_active: false })
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error deleting company:', error);
+        throw error;
+      }
+
+      console.log('✅ Company deleted successfully');
     } catch (error) {
+      console.error('💥 Failed to delete company:', error);
       handleSupabaseError(error, 'Delete company');
     }
   }
@@ -594,13 +679,11 @@ export const voipAPI = {
   testConnection: async (companyId, settings) => {
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
       const success = Math.random() > 0.3;
+
       const result = {
         success,
-        message: success 
-          ? 'Connection successful' 
-          : 'Connection failed: Invalid credentials',
+        message: success ? 'Connection successful' : 'Connection failed: Invalid credentials',
         tested_at: new Date().toISOString()
       };
 
@@ -626,20 +709,45 @@ export const usersAPI = {
     try {
       let query = supabase
         .from('users_crm_8x9p2k')
-        .select(`
-          *,
-          company:companies_crm_8x9p2k(*)
-        `)
+        .select('*')
         .eq('is_active', true);
 
       if (companyId) {
         query = query.eq('company_id', companyId);
       }
 
-      const { data, error } = await query.order('created_at', { ascending: false });
+      const { data: users, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data || [];
+
+      // Enrich users with company data
+      const enrichedUsers = await Promise.all(
+        (users || []).map(async (user) => {
+          if (!user.company_id) {
+            return { ...user, company: null };
+          }
+
+          try {
+            const { data: company, error: companyError } = await supabase
+              .from('companies_crm_8x9p2k')
+              .select('*')
+              .eq('id', user.company_id)
+              .single();
+
+            if (companyError) {
+              console.warn('Could not fetch company for user:', user.id);
+              return { ...user, company: null };
+            }
+
+            return { ...user, company };
+          } catch (error) {
+            console.warn('Error enriching user:', user.id, error);
+            return { ...user, company: null };
+          }
+        })
+      );
+
+      return enrichedUsers;
     } catch (error) {
       handleSupabaseError(error, 'Get users');
     }
@@ -654,13 +762,24 @@ export const usersAPI = {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .select(`
-          *,
-          company:companies_crm_8x9p2k(*)
-        `)
+        .select()
         .single();
 
       if (error) throw error;
+
+      // Get company data if user has company_id
+      if (data.company_id) {
+        const { data: company, error: companyError } = await supabase
+          .from('companies_crm_8x9p2k')
+          .select('*')
+          .eq('id', data.company_id)
+          .single();
+
+        if (!companyError && company) {
+          data.company = company;
+        }
+      }
+
       return data;
     } catch (error) {
       handleSupabaseError(error, 'Create user');
@@ -705,13 +824,9 @@ export const callersAPI = {
   getAll: async (companyId) => {
     try {
       console.log('Getting callers for company:', companyId);
-      
-      const { data, error } = await supabase
+      const { data: callers, error } = await supabase
         .from('callers_crm_8x9p2k')
-        .select(`
-          *,
-          addresses:addresses_crm_8x9p2k(*)
-        `)
+        .select('*')
         .eq('company_id', companyId)
         .eq('is_active', true)
         .order('created_at', { ascending: false });
@@ -721,8 +836,31 @@ export const callersAPI = {
         throw error;
       }
 
-      console.log('Callers retrieved:', data?.length || 0);
-      return data || [];
+      console.log('Callers retrieved:', callers?.length || 0);
+
+      // Get addresses for each caller
+      const callersWithAddresses = await Promise.all(
+        (callers || []).map(async (caller) => {
+          try {
+            const { data: addresses, error: addressError } = await supabase
+              .from('addresses_crm_8x9p2k')
+              .select('*')
+              .eq('caller_id', caller.id);
+
+            if (addressError) {
+              console.warn('Could not fetch addresses for caller:', caller.id);
+              return { ...caller, addresses: [] };
+            }
+
+            return { ...caller, addresses: addresses || [] };
+          } catch (error) {
+            console.warn('Error enriching caller:', caller.id, error);
+            return { ...caller, addresses: [] };
+          }
+        })
+      );
+
+      return callersWithAddresses;
     } catch (error) {
       console.error('Failed to get callers:', error);
       handleSupabaseError(error, 'Get callers');
@@ -731,18 +869,26 @@ export const callersAPI = {
 
   getById: async (id) => {
     try {
-      const { data, error } = await supabase
+      const { data: caller, error } = await supabase
         .from('callers_crm_8x9p2k')
-        .select(`
-          *,
-          addresses:addresses_crm_8x9p2k(*)
-        `)
+        .select('*')
         .eq('id', id)
         .eq('is_active', true)
         .single();
 
       if (error) throw error;
-      return data;
+
+      // Get addresses for this caller
+      const { data: addresses, error: addressError } = await supabase
+        .from('addresses_crm_8x9p2k')
+        .select('*')
+        .eq('caller_id', id);
+
+      if (!addressError && addresses) {
+        caller.addresses = addresses;
+      }
+
+      return caller;
     } catch (error) {
       handleSupabaseError(error, 'Get caller by ID');
     }
@@ -751,13 +897,9 @@ export const callersAPI = {
   getByPhone: async (companyId, phoneNumber) => {
     try {
       console.log('Looking for caller with phone:', phoneNumber, 'in company:', companyId);
-      
-      const { data, error } = await supabase
+      const { data: caller, error } = await supabase
         .from('callers_crm_8x9p2k')
-        .select(`
-          *,
-          addresses:addresses_crm_8x9p2k(*)
-        `)
+        .select('*')
         .eq('company_id', companyId)
         .eq('phone_number', phoneNumber)
         .eq('is_active', true)
@@ -768,8 +910,23 @@ export const callersAPI = {
         throw error;
       }
 
-      console.log('Caller found by phone:', !!data);
-      return data || null;
+      console.log('Caller found by phone:', !!caller);
+
+      if (!caller) {
+        return null;
+      }
+
+      // Get addresses for this caller
+      const { data: addresses, error: addressError } = await supabase
+        .from('addresses_crm_8x9p2k')
+        .select('*')
+        .eq('caller_id', caller.id);
+
+      if (!addressError && addresses) {
+        caller.addresses = addresses;
+      }
+
+      return caller;
     } catch (error) {
       console.error('Failed to get caller by phone:', error);
       handleSupabaseError(error, 'Get caller by phone');
@@ -779,7 +936,6 @@ export const callersAPI = {
   create: async (callerData) => {
     try {
       console.log('Creating caller with data:', callerData);
-      
       const { data, error } = await supabase
         .from('callers_crm_8x9p2k')
         .insert({
@@ -788,10 +944,7 @@ export const callersAPI = {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .select(`
-          *,
-          addresses:addresses_crm_8x9p2k(*)
-        `)
+        .select()
         .single();
 
       if (error) {
@@ -800,6 +953,10 @@ export const callersAPI = {
       }
 
       console.log('Caller created successfully:', data);
+      
+      // Initialize with empty addresses array
+      data.addresses = [];
+      
       return data;
     } catch (error) {
       console.error('Failed to create caller:', error);
@@ -816,13 +973,21 @@ export const callersAPI = {
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
-        .select(`
-          *,
-          addresses:addresses_crm_8x9p2k(*)
-        `)
+        .select()
         .single();
 
       if (error) throw error;
+
+      // Get addresses for this caller
+      const { data: addresses, error: addressError } = await supabase
+        .from('addresses_crm_8x9p2k')
+        .select('*')
+        .eq('caller_id', id);
+
+      if (!addressError && addresses) {
+        data.addresses = addresses;
+      }
+
       return data;
     } catch (error) {
       handleSupabaseError(error, 'Update caller');
@@ -848,7 +1013,6 @@ export const addressesAPI = {
   create: async (addressData) => {
     try {
       console.log('Creating address with data:', addressData);
-      
       const { data, error } = await supabase
         .from('addresses_crm_8x9p2k')
         .insert({
@@ -875,7 +1039,6 @@ export const addressesAPI = {
   update: async (id, addressData) => {
     try {
       console.log('Updating address:', id, 'with data:', addressData);
-      
       const { data, error } = await supabase
         .from('addresses_crm_8x9p2k')
         .update({
@@ -902,7 +1065,6 @@ export const addressesAPI = {
   delete: async (id) => {
     try {
       console.log('Deleting address:', id);
-      
       const { error } = await supabase
         .from('addresses_crm_8x9p2k')
         .delete()

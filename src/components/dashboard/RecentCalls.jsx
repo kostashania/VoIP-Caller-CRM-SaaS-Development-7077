@@ -43,7 +43,7 @@ function RecentCalls({ calls }) {
     <div className="bg-white shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Calls</h3>
-        
+
         {recentCalls.length === 0 ? (
           <div className="text-center py-8">
             <SafeIcon icon={FiPhone} className="mx-auto h-12 w-12 text-gray-400" />
@@ -66,13 +66,9 @@ function RecentCalls({ calls }) {
                   <div className="flex items-center space-x-4">
                     <div className="flex-shrink-0">
                       <div className={`rounded-full p-2 ${getStatusColor(call.call_status)}`}>
-                        <SafeIcon 
-                          icon={getStatusIcon(call.call_status)} 
-                          className="h-4 w-4" 
-                        />
+                        <SafeIcon icon={getStatusIcon(call.call_status)} className="h-4 w-4" />
                       </div>
                     </div>
-                    
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between">
                         <div>
@@ -80,7 +76,7 @@ function RecentCalls({ calls }) {
                             {call.caller?.name || 'Unknown Caller'}
                           </p>
                           <p className="text-sm text-gray-500">
-                            {call.caller?.phone_number || 'No number'}
+                            {call.caller_number || 'No number'}
                           </p>
                         </div>
                         <div className="text-right">
@@ -88,11 +84,10 @@ function RecentCalls({ calls }) {
                             {format(new Date(call.timestamp), 'MMM d, HH:mm')}
                           </p>
                           <p className="text-sm text-gray-500">
-                            {formatDuration(call.duration_sec)}
+                            {formatDuration(call.duration_seconds || call.duration_sec)}
                           </p>
                         </div>
                       </div>
-                      
                       {call.caller && (
                         <div className="mt-2">
                           <Link
