@@ -6,24 +6,28 @@ import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { useCallerStore } from '../../store/callerStore';
 import { useAuthStore } from '../../store/authStore';
-import { callersAPI } from '../../services/supabaseAPI';
+import { callersAPI, addressesAPI } from '../../services/supabaseAPI';
 import AddCallerModal from '../callers/AddCallerModal';
 import EditCallerModal from './EditCallerModal';
+import AddressModal from '../callers/AddressModal';
 import toast from 'react-hot-toast';
 
-const { FiUsers, FiPlus, FiEdit, FiTrash2, FiPhone, FiMapPin, FiDownload, FiSearch, FiFilter, FiRefreshCw } = FiIcons;
+const { FiUsers, FiPlus, FiEdit, FiTrash2, FiPhone, FiMapPin, FiDownload, FiSearch, FiFilter, FiRefreshCw, FiEye } = FiIcons;
 
 function ContactsManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddCaller, setShowAddCaller] = useState(false);
   const [showEditCaller, setShowEditCaller] = useState(false);
+  const [showAddressModal, setShowAddressModal] = useState(false);
   const [editingCaller, setEditingCaller] = useState(null);
+  const [editingAddress, setEditingAddress] = useState(null);
+  const [selectedCaller, setSelectedCaller] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
   const [isExporting, setIsExporting] = useState(false);
   
-  const { callers, setCallers } = useCallerStore();
+  const { callers, setCallers, updateCaller } = useCallerStore();
   const { getUserCompanyId } = useAuthStore();
 
   useEffect(() => {
@@ -70,16 +74,90 @@ function ContactsManagement() {
     }
   };
 
+  const handleAddAddress = (caller) => {
+    setSelectedCaller(caller);
+    setEditingAddress(null);
+    setShowAddressModal(true);
+  };
+
+  const handleEditAddress = (caller, address) => {
+    setSelectedCaller(caller);
+    setEditingAddress(address);
+    setShowAddressModal(true);
+  };
+
+  const handleDeleteAddress = async (callerId, addressId) => {
+    if (!confirm('Are you sure you want to delete this address?')) {
+      return;
+    }
+
+    try {
+      await addressesAPI.delete(addressId);
+      toast.success('Address deleted successfully');
+      
+      // Update the caller in the local state
+      const updatedCaller = callers.find(c => c.id === callerId);
+      if (updatedCaller) {
+        const newAddresses = updatedCaller.addresses.filter(addr => addr.id !== addressId);
+        updateCaller(callerId, { addresses: newAddresses });
+      }
+    } catch (error) {
+      console.error('Failed to delete address:', error);
+      toast.error('Failed to delete address');
+    }
+  };
+
+  const handleAddressSubmit = async (addressData) => {
+    try {
+      let result;
+      if (editingAddress) {
+        // Update existing address
+        result = await addressesAPI.update(editingAddress.id, addressData);
+        toast.success('Address updated successfully');
+        
+        // Update local state
+        const updatedCaller = callers.find(c => c.id === selectedCaller.id);
+        if (updatedCaller) {
+          const newAddresses = updatedCaller.addresses.map(addr => 
+            addr.id === editingAddress.id ? result : addr
+          );
+          updateCaller(selectedCaller.id, { addresses: newAddresses });
+        }
+      } else {
+        // Create new address
+        result = await addressesAPI.create({
+          ...addressData,
+          caller_id: selectedCaller.id
+        });
+        toast.success('Address added successfully');
+        
+        // Update local state
+        const updatedCaller = callers.find(c => c.id === selectedCaller.id);
+        if (updatedCaller) {
+          const newAddresses = [...(updatedCaller.addresses || []), result];
+          updateCaller(selectedCaller.id, { addresses: newAddresses });
+        }
+      }
+
+      setShowAddressModal(false);
+      setEditingAddress(null);
+      setSelectedCaller(null);
+    } catch (error) {
+      console.error('Failed to save address:', error);
+      toast.error('Failed to save address');
+    }
+  };
+
   const handleExportContacts = async () => {
     setIsExporting(true);
     try {
       // Create CSV content
-      const csvHeaders = ['Name', 'Phone Number', 'Notes', 'Addresses Count', 'Created Date'];
+      const csvHeaders = ['Name', 'Phone Number', 'Notes', 'Addresses', 'Created Date'];
       const csvData = filteredAndSortedCallers.map(caller => [
         caller.name,
         caller.phone_number,
         caller.global_note || '',
-        caller.addresses?.length || 0,
+        caller.addresses?.map(addr => `${addr.label}: ${addr.address}`).join('; ') || '',
         format(new Date(caller.created_at), 'yyyy-MM-dd HH:mm')
       ]);
 
@@ -296,7 +374,7 @@ function ContactsManagement() {
           </div>
         </div>
 
-        {/* Contacts Table */}
+        {/* Contacts List */}
         <div className="bg-white shadow rounded-lg overflow-hidden">
           <div className="px-4 py-5 sm:p-6">
             {filteredAndSortedCallers.length === 0 ? (
@@ -324,108 +402,132 @@ function ContactsManagement() {
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Contact
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Phone Number
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Addresses
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Notes
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Added
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredAndSortedCallers.map((caller, index) => (
-                      <motion.tr
-                        key={caller.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="hover:bg-gray-50"
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10">
-                              <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
-                                <SafeIcon icon={FiUsers} className="h-5 w-5 text-primary-600" />
+              <div className="space-y-6">
+                {filteredAndSortedCallers.map((caller, index) => (
+                  <motion.div
+                    key={caller.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
+                  >
+                    {/* Contact Header */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex-shrink-0 h-12 w-12">
+                          <div className="h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center">
+                            <SafeIcon icon={FiUsers} className="h-6 w-6 text-primary-600" />
+                          </div>
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-medium text-gray-900">{caller.name}</h3>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <SafeIcon icon={FiPhone} className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm text-gray-600 font-mono">{caller.phone_number}</span>
+                          </div>
+                          {caller.global_note && (
+                            <p className="text-sm text-gray-500 mt-1 italic">"{caller.global_note}"</p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Contact Actions */}
+                      <div className="flex items-center space-x-2">
+                        <Link
+                          to={`/caller/${caller.id}`}
+                          className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          <SafeIcon icon={FiEye} className="h-4 w-4 mr-1" />
+                          View
+                        </Link>
+                        <button
+                          onClick={() => handleEditCaller(caller)}
+                          className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          <SafeIcon icon={FiEdit} className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCaller(caller.id)}
+                          className="inline-flex items-center px-3 py-1 border border-red-300 shadow-sm text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50"
+                        >
+                          <SafeIcon icon={FiTrash2} className="h-4 w-4 mr-1" />
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Addresses Section */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-gray-900">
+                          📍 Addresses ({caller.addresses?.length || 0})
+                        </h4>
+                        <button
+                          onClick={() => handleAddAddress(caller)}
+                          className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-md text-primary-700 bg-primary-100 hover:bg-primary-200"
+                        >
+                          <SafeIcon icon={FiPlus} className="h-3 w-3 mr-1" />
+                          Add Address
+                        </button>
+                      </div>
+
+                      {caller.addresses && caller.addresses.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {caller.addresses.map((address) => (
+                            <div
+                              key={address.id}
+                              className="border border-gray-200 rounded-md p-3 bg-gray-50"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    <SafeIcon icon={FiMapPin} className="h-4 w-4 text-gray-400" />
+                                    <span className="text-sm font-medium text-gray-900">{address.label}</span>
+                                  </div>
+                                  <p className="text-sm text-gray-600">{address.address}</p>
+                                  {address.comment && (
+                                    <p className="text-xs text-gray-500 mt-1 italic">💬 {address.comment}</p>
+                                  )}
+                                  {address.phone && address.phone !== caller.phone_number && (
+                                    <p className="text-xs text-gray-500 mt-1">📞 {address.phone}</p>
+                                  )}
+                                </div>
+                                <div className="flex space-x-1 ml-2">
+                                  <button
+                                    onClick={() => handleEditAddress(caller, address)}
+                                    className="p-1 text-gray-400 hover:text-blue-600"
+                                    title="Edit address"
+                                  >
+                                    <SafeIcon icon={FiEdit} className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAddress(caller.id, address.id)}
+                                    className="p-1 text-gray-400 hover:text-red-600"
+                                    title="Delete address"
+                                  >
+                                    <SafeIcon icon={FiTrash2} className="h-3 w-3" />
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">
-                                {caller.name}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                ID: {caller.id.slice(0, 8)}...
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <SafeIcon icon={FiPhone} className="h-4 w-4 text-gray-400 mr-2" />
-                            <span className="text-sm text-gray-900 font-mono">
-                              {caller.phone_number}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <SafeIcon icon={FiMapPin} className="h-4 w-4 text-gray-400 mr-2" />
-                            <span className="text-sm text-gray-900">
-                              {caller.addresses?.length || 0} address{caller.addresses?.length !== 1 ? 'es' : ''}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-900 max-w-xs truncate">
-                            {caller.global_note || (
-                              <span className="text-gray-400 italic">No notes</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {format(new Date(caller.created_at), 'MMM d, yyyy')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex items-center justify-end space-x-2">
-                            <Link
-                              to={`/caller/${caller.id}`}
-                              className="text-primary-600 hover:text-primary-900"
-                            >
-                              View
-                            </Link>
-                            <button
-                              onClick={() => handleEditCaller(caller)}
-                              className="text-gray-600 hover:text-gray-900"
-                            >
-                              <SafeIcon icon={FiEdit} className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCaller(caller.id)}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              <SafeIcon icon={FiTrash2} className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-gray-500 text-sm">
+                          No addresses added yet
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Contact Info */}
+                    <div className="border-t border-gray-200 pt-3 mt-3">
+                      <div className="text-xs text-gray-500">
+                        Added: {format(new Date(caller.created_at), 'MMM d, yyyy HH:mm')}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
               </div>
             )}
           </div>
@@ -458,6 +560,21 @@ function ContactsManagement() {
             setEditingCaller(null);
             loadCallers();
           }}
+        />
+      )}
+
+      {/* Address Modal */}
+      {showAddressModal && selectedCaller && (
+        <AddressModal
+          isOpen={showAddressModal}
+          onClose={() => {
+            setShowAddressModal(false);
+            setEditingAddress(null);
+            setSelectedCaller(null);
+          }}
+          callerId={selectedCaller.id}
+          address={editingAddress}
+          onSubmit={handleAddressSubmit}
         />
       )}
     </>

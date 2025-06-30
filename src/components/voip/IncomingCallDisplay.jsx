@@ -20,6 +20,7 @@ function IncomingCallDisplay() {
   const [editingAddress, setEditingAddress] = useState(null);
   const [isCallActive, setIsCallActive] = useState(false);
   const [showNewCallerForm, setShowNewCallerForm] = useState(false);
+  const [callEnded, setCallEnded] = useState(false);
 
   const { incomingCall, clearIncomingCall, updateCallLog } = useCallStore();
   const { addCaller, updateCaller } = useCallerStore();
@@ -38,13 +39,13 @@ function IncomingCallDisplay() {
   useEffect(() => {
     // Auto-clear incoming call after 30 seconds if not answered
     const timer = setTimeout(() => {
-      if (incomingCall && !isCallActive) {
+      if (incomingCall && !isCallActive && !callEnded) {
         handleMissed();
       }
     }, 30000);
 
     return () => clearTimeout(timer);
-  }, [incomingCall, isCallActive]);
+  }, [incomingCall, isCallActive, callEnded]);
 
   const handleAnswer = async () => {
     if (!incomingCall) return;
@@ -81,7 +82,8 @@ function IncomingCallDisplay() {
       updateCallLog(updatedCall);
 
       setIsCallActive(false);
-      clearIncomingCall();
+      setCallEnded(true); // Mark call as ended but don't close popup
+      
       toast.success(`Call completed (${formatDuration(callDuration)})`, { duration: 2000 });
     } catch (error) {
       console.error('Failed to end call:', error);
@@ -95,11 +97,22 @@ function IncomingCallDisplay() {
     try {
       const updatedCall = await callLogsAPI.updateStatus(incomingCall.id, 'missed');
       updateCallLog(updatedCall);
-      clearIncomingCall();
+      
+      setCallEnded(true); // Mark call as ended but don't close popup
       toast.info('Call missed', { duration: 1500 });
     } catch (error) {
       console.error('Failed to mark call as missed:', error);
     }
+  };
+
+  const handleClosePopup = () => {
+    clearIncomingCall();
+    setCallEnded(false);
+    setIsCallActive(false);
+    setCallStartTime(null);
+    setCallDuration(0);
+    setSelectedAddressId(null);
+    setShowNewCallerForm(false);
   };
 
   const handleCreateNewCaller = async (formData) => {
@@ -115,7 +128,11 @@ function IncomingCallDisplay() {
       addCaller(newCaller);
 
       // Update the incoming call with the new caller
-      const updatedCall = { ...incomingCall, caller: newCaller, caller_id: newCaller.id };
+      const updatedCall = {
+        ...incomingCall,
+        caller: newCaller,
+        caller_id: newCaller.id
+      };
       updateCallLog(updatedCall);
 
       setShowNewCallerForm(false);
@@ -165,10 +182,18 @@ function IncomingCallDisplay() {
 
   const handleAddAddress = async (addressData) => {
     try {
+      console.log('Adding new address:', addressData);
+      
       const newAddress = await addressesAPI.create({
-        ...addressData,
-        caller_id: incomingCall.caller.id
+        caller_id: incomingCall.caller.id,
+        label: addressData.label,
+        address: addressData.address,
+        phone: addressData.phone || null,
+        comment: addressData.comment || null,
+        is_primary: false
       });
+
+      console.log('New address created:', newAddress);
 
       // Update caller with new address
       const updatedCaller = {
@@ -179,6 +204,7 @@ function IncomingCallDisplay() {
 
       setShowAddressModal(false);
       setEditingAddress(null);
+      
       toast.success('Address added successfully', { duration: 2000 });
     } catch (error) {
       console.error('Failed to add address:', error);
@@ -188,12 +214,21 @@ function IncomingCallDisplay() {
 
   const handleUpdateAddress = async (addressData) => {
     try {
-      const updatedAddress = await addressesAPI.update(editingAddress.id, addressData);
+      console.log('Updating address:', editingAddress.id, addressData);
+      
+      const updatedAddress = await addressesAPI.update(editingAddress.id, {
+        label: addressData.label,
+        address: addressData.address,
+        phone: addressData.phone || null,
+        comment: addressData.comment || null
+      });
+
+      console.log('Address updated:', updatedAddress);
 
       // Update caller with updated address
       const updatedCaller = {
         ...incomingCall.caller,
-        addresses: incomingCall.caller.addresses.map(addr =>
+        addresses: incomingCall.caller.addresses.map(addr => 
           addr.id === editingAddress.id ? updatedAddress : addr
         )
       };
@@ -201,11 +236,17 @@ function IncomingCallDisplay() {
 
       setShowAddressModal(false);
       setEditingAddress(null);
+      
       toast.success('Address updated successfully', { duration: 2000 });
     } catch (error) {
       console.error('Failed to update address:', error);
       toast.error('Failed to update address');
     }
+  };
+
+  const handleAddAddressClick = () => {
+    setEditingAddress(null);
+    setShowAddressModal(true);
   };
 
   const formatDuration = (seconds) => {
@@ -229,7 +270,6 @@ function IncomingCallDisplay() {
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black bg-opacity-50" />
-      
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -239,11 +279,20 @@ function IncomingCallDisplay() {
         >
           {/* Header */}
           <div className={`${
-            isCallActive ? 'bg-gradient-to-r from-green-600 to-green-700' : 'bg-gradient-to-r from-blue-600 to-blue-700'
+            isCallActive 
+              ? 'bg-gradient-to-r from-green-600 to-green-700' 
+              : callEnded 
+                ? 'bg-gradient-to-r from-gray-600 to-gray-700'
+                : 'bg-gradient-to-r from-blue-600 to-blue-700'
           } rounded-t-2xl p-6 text-white`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">
-                {isCallActive ? '📞 Active Call' : '📱 Incoming Call'}
+                {callEnded 
+                  ? '📞 Call Ended' 
+                  : isCallActive 
+                    ? '📞 Active Call' 
+                    : '📱 Incoming Call'
+                }
               </h3>
               <div className="flex items-center space-x-2">
                 {isCallActive && (
@@ -254,14 +303,12 @@ function IncomingCallDisplay() {
                     </span>
                   </div>
                 )}
-                {!isCallActive && (
-                  <button
-                    onClick={handleMissed}
-                    className="text-white hover:text-gray-200"
-                  >
-                    <SafeIcon icon={FiX} className="w-5 h-5" />
-                  </button>
-                )}
+                <button
+                  onClick={handleClosePopup}
+                  className="text-white hover:text-gray-200"
+                >
+                  <SafeIcon icon={FiX} className="w-5 h-5" />
+                </button>
               </div>
             </div>
 
@@ -302,10 +349,7 @@ function IncomingCallDisplay() {
                 {/* New Address Button */}
                 <div className="text-center">
                   <button
-                    onClick={() => {
-                      setEditingAddress(null);
-                      setShowAddressModal(true);
-                    }}
+                    onClick={handleAddAddressClick}
                     className="inline-flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                   >
                     <SafeIcon icon={FiPlus} className="w-4 h-4" />
@@ -333,10 +377,7 @@ function IncomingCallDisplay() {
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center space-x-2 mb-2">
-                                <SafeIcon
-                                  icon={getAddressIcon(address.label)}
-                                  className="w-5 h-5 text-gray-400"
-                                />
+                                <SafeIcon icon={getAddressIcon(address.label)} className="w-5 h-5 text-gray-400" />
                                 <span className="font-medium text-gray-900">{address.label}</span>
                                 {selectedAddressId === address.id && (
                                   <SafeIcon icon={FiCheckCircle} className="w-5 h-5 text-primary-600" />
@@ -411,14 +452,16 @@ function IncomingCallDisplay() {
                 ) : (
                   <div className="text-left bg-gray-50 rounded-lg p-4 max-w-md mx-auto">
                     <h6 className="font-medium text-gray-900 mb-4">Create New Customer</h6>
-                    <form onSubmit={(e) => {
-                      e.preventDefault();
-                      const formData = new FormData(e.target);
-                      handleCreateNewCaller({
-                        name: formData.get('name'),
-                        notes: formData.get('notes')
-                      });
-                    }}>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.target);
+                        handleCreateNewCaller({
+                          name: formData.get('name'),
+                          notes: formData.get('notes')
+                        });
+                      }}
+                    >
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -466,37 +509,52 @@ function IncomingCallDisplay() {
             )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="border-t border-gray-200 px-6 py-4">
-            {!isCallActive ? (
-              <div className="flex space-x-3">
-                <button
-                  onClick={handleMissed}
-                  className="flex-1 flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-                >
-                  <SafeIcon icon={FiPhoneOff} className="w-5 h-5" />
-                  <span>Decline</span>
-                </button>
-                <button
-                  onClick={handleAnswer}
-                  className="flex-1 flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors animate-pulse"
-                >
-                  <SafeIcon icon={FiPhone} className="w-5 h-5" />
-                  <span>Answer</span>
-                </button>
-              </div>
-            ) : (
-              <div className="flex space-x-3">
-                <button
-                  onClick={handleEndCall}
-                  className="w-full flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-                >
-                  <SafeIcon icon={FiPhoneOff} className="w-5 h-5" />
-                  <span>End Call</span>
-                </button>
-              </div>
-            )}
-          </div>
+          {/* Action Buttons - Only show if call hasn't ended */}
+          {!callEnded && (
+            <div className="border-t border-gray-200 px-6 py-4">
+              {!isCallActive ? (
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleMissed}
+                    className="flex-1 flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                  >
+                    <SafeIcon icon={FiPhoneOff} className="w-5 h-5" />
+                    <span>Decline</span>
+                  </button>
+                  <button
+                    onClick={handleAnswer}
+                    className="flex-1 flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg transition-colors animate-pulse"
+                  >
+                    <SafeIcon icon={FiPhone} className="w-5 h-5" />
+                    <span>Answer</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex space-x-3">
+                  <button
+                    onClick={handleEndCall}
+                    className="w-full flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+                  >
+                    <SafeIcon icon={FiPhoneOff} className="w-5 h-5" />
+                    <span>End Call</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Show close button if call has ended */}
+          {callEnded && (
+            <div className="border-t border-gray-200 px-6 py-4">
+              <button
+                onClick={handleClosePopup}
+                className="w-full flex items-center justify-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+              >
+                <SafeIcon icon={FiX} className="w-5 h-5" />
+                <span>Close</span>
+              </button>
+            </div>
+          )}
         </motion.div>
       </div>
 

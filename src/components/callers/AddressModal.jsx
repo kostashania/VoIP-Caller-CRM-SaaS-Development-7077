@@ -4,17 +4,13 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
+import { addressesAPI } from '../../services/supabaseAPI';
 
 const { FiX, FiMapPin, FiTag, FiFileText, FiPhone } = FiIcons;
 
 function AddressModal({ isOpen, onClose, callerId, address, onSubmit }) {
   const isEditing = !!address;
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset
-  } = useForm({
+  const { register, handleSubmit, formState: { errors }, reset } = useForm({
     defaultValues: {
       label: address?.label || 'Home',
       address: address?.address || '',
@@ -25,8 +21,40 @@ function AddressModal({ isOpen, onClose, callerId, address, onSubmit }) {
 
   const handleFormSubmit = async (data) => {
     try {
-      await onSubmit(data);
+      console.log('Address modal form submit:', { isEditing, callerId, data });
+      
+      let result;
+      if (isEditing) {
+        // Update existing address
+        result = await addressesAPI.update(address.id, {
+          label: data.label,
+          address: data.address,
+          phone: data.phone || null,
+          comment: data.comment || null
+        });
+        console.log('Address updated:', result);
+        toast.success('Address updated successfully');
+      } else {
+        // Create new address
+        result = await addressesAPI.create({
+          caller_id: callerId,
+          label: data.label,
+          address: data.address,
+          phone: data.phone || null,
+          comment: data.comment || null,
+          is_primary: false
+        });
+        console.log('Address created:', result);
+        toast.success('Address added successfully');
+      }
+
+      // Call the onSubmit callback if provided
+      if (onSubmit) {
+        await onSubmit(result);
+      }
+
       reset();
+      onClose();
     } catch (error) {
       console.error(`Failed to ${isEditing ? 'update' : 'add'} address:`, error);
       toast.error(error.message || `Failed to ${isEditing ? 'update' : 'add'} address`);
