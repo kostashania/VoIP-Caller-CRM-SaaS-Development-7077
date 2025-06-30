@@ -362,9 +362,36 @@ export const callLogsAPI = {
   create: async (callData) => {
     try {
       console.log('Creating call log with data:', callData);
+      
+      // Only include fields that exist in the database
+      const cleanCallData = {
+        company_id: callData.company_id,
+        caller_id: callData.caller_id || null,
+        caller_number: callData.caller_number,
+        call_status: callData.call_status || 'incoming',
+        call_direction: callData.call_direction || 'inbound',
+        timestamp: callData.timestamp || new Date().toISOString(),
+        voip_raw_payload: callData.voip_raw_payload ? JSON.stringify(callData.voip_raw_payload) : null,
+        duration_seconds: callData.duration_seconds || null,
+        answered_at: callData.answered_at || null,
+        ended_at: callData.ended_at || null,
+        call_note: callData.call_note || null,
+        selected_address_id: callData.selected_address_id || null,
+        delivery_status: callData.delivery_status || null
+      };
+
+      // Remove any undefined values
+      Object.keys(cleanCallData).forEach(key => {
+        if (cleanCallData[key] === undefined) {
+          delete cleanCallData[key];
+        }
+      });
+
+      console.log('Clean call data to insert:', cleanCallData);
+
       const { data, error } = await supabase
         .from('call_logs_crm_8x9p2k')
-        .insert(callData)
+        .insert(cleanCallData)
         .select('*')
         .single();
 
@@ -384,12 +411,25 @@ export const callLogsAPI = {
   updateStatus: async (id, status, metadata = {}) => {
     try {
       console.log('Updating call log status:', { id, status, metadata });
+      
+      // Only include fields that exist in the database
+      const cleanMetadata = {
+        call_status: status
+      };
+
+      // Add only known fields from metadata
+      if (metadata.answered_at) cleanMetadata.answered_at = metadata.answered_at;
+      if (metadata.ended_at) cleanMetadata.ended_at = metadata.ended_at;
+      if (metadata.duration_seconds !== undefined) cleanMetadata.duration_seconds = metadata.duration_seconds;
+      if (metadata.call_note) cleanMetadata.call_note = metadata.call_note;
+      if (metadata.selected_address_id) cleanMetadata.selected_address_id = metadata.selected_address_id;
+      if (metadata.delivery_status) cleanMetadata.delivery_status = metadata.delivery_status;
+
+      console.log('Clean metadata to update:', cleanMetadata);
+
       const { data, error } = await supabase
         .from('call_logs_crm_8x9p2k')
-        .update({
-          call_status: status,
-          ...metadata
-        })
+        .update(cleanMetadata)
         .eq('id', id)
         .select('*')
         .single();

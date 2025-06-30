@@ -38,7 +38,7 @@ class WebhookService {
     try {
       this.isListening = true;
       console.log('🎧 Starting webhook listener for company:', companyId);
-      
+
       // Send a test call after 10 seconds
       setTimeout(() => {
         if (this.isListening) {
@@ -46,10 +46,9 @@ class WebhookService {
           this.sendTestCall(companyId);
         }
       }, 10000);
-      
+
       console.log('✅ Webhook listener started');
       console.log('📞 Webhook URL:', this.getWebhookUrl(companyId));
-      
       toast.success('Webhook listener started - test call in 10 seconds!', { duration: 3000 });
     } catch (error) {
       console.error('Failed to start webhook listener:', error);
@@ -92,10 +91,9 @@ class WebhookService {
       caller_id: testCallerId,
       timestamp: new Date().toISOString(),
       call_type: 'incoming',
-      webhook_id: `test-${Date.now()}`,
       source: 'test_webhook'
     }, companyId);
-    
+
     toast.success('Test webhook call sent!', { duration: 2000 });
   }
 
@@ -127,7 +125,6 @@ class WebhookService {
             caller_id: callerId,
             timestamp: new Date().toISOString(),
             call_type: 'incoming',
-            webhook_id: `random-${Date.now()}`,
             source: 'random_simulation'
           }, companyId);
 
@@ -149,12 +146,10 @@ class WebhookService {
 
   stopSimulation() {
     this.isSimulating = false;
-    
     if (this.randomSimulationTimer) {
       clearTimeout(this.randomSimulationTimer);
       this.randomSimulationTimer = null;
     }
-
     console.log('🛑 Random simulation stopped');
     toast.success('Random simulation stopped', { duration: 2000 });
   }
@@ -163,14 +158,14 @@ class WebhookService {
     // Known callers (these will have existing records)
     const knownCallers = [
       '+1234567890',
-      '+0987654321', 
+      '+0987654321',
       '+1122334455'
     ];
 
     // Unknown callers (these will trigger new customer creation)
     const unknownCallers = [
       '+1555000001',
-      '+1555000002', 
+      '+1555000002',
       '+1555000003',
       '+1666777888',
       '+1777888999',
@@ -211,7 +206,7 @@ class WebhookService {
       const existingCaller = await callersAPI.getByPhone(companyId, callerId);
       console.log('👤 Existing caller found:', !!existingCaller);
 
-      // Create call log entry
+      // Create call log entry with only existing fields
       console.log('📝 Creating call log entry...');
       const callLogData = {
         company_id: companyId,
@@ -219,8 +214,7 @@ class WebhookService {
         caller_number: callerId,
         call_status: 'incoming',
         call_direction: 'inbound',
-        webhook_id: webhookData.webhook_id || `webhook-${Date.now()}`,
-        voip_raw_payload: JSON.stringify(webhookData),
+        voip_raw_payload: webhookData,
         timestamp: webhookData.timestamp || new Date().toISOString()
       };
 
@@ -266,22 +260,19 @@ class WebhookService {
     } catch (error) {
       console.error('❌ Failed to process webhook call:', error);
       toast.error(`Failed to process call: ${error.message}`, { duration: 4000 });
-      return {
-        success: false,
-        error: error.message
-      };
+      return { success: false, error: error.message };
     }
   }
 
   cleanCallerId(rawCallerId) {
     // Remove any non-numeric characters except +
     let cleaned = String(rawCallerId).replace(/[^\d+]/g, '');
-
+    
     // Ensure it starts with + for international format
     if (!cleaned.startsWith('+')) {
       cleaned = '+' + cleaned;
     }
-
+    
     return cleaned;
   }
 
