@@ -5,7 +5,7 @@ import SafeIcon from '../../common/SafeIcon';
 import { useCallStore } from '../../store/callStore';
 import { useCallerStore } from '../../store/callerStore';
 import { useAuthStore } from '../../store/authStore';
-import { callsAPI, callersAPI } from '../../services/supabaseAPI';
+import { callLogsAPI, callersAPI } from '../../services/supabaseAPI';
 import StatsCards from './StatsCards';
 import RecentCalls from './RecentCalls';
 import QuickActions from './QuickActions';
@@ -29,12 +29,17 @@ function Dashboard() {
           return;
         }
 
+        console.log('Loading dashboard data for company:', companyId);
+
         // Load calls and callers for the user's company
         const [callsData, callersData] = await Promise.all([
-          companyId ? callsAPI.getAll(companyId) : [],
+          companyId ? callLogsAPI.getAll(companyId) : [],
           companyId ? callersAPI.getAll(companyId) : []
         ]);
-        
+
+        console.log('Loaded calls:', callsData.length);
+        console.log('Loaded callers:', callersData.length);
+
         setCalls(callsData);
         setCallHistory(callsData);
         setCallers(callersData);

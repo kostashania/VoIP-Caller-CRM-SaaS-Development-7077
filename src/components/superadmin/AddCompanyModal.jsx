@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -9,23 +9,44 @@ import { companiesAPI } from '../../services/supabaseAPI';
 const { FiX, FiBriefcase, FiCalendar, FiUser, FiMail } = FiIcons;
 
 function AddCompanyModal({ isOpen, onClose, onSuccess }) {
-  const { register, handleSubmit, formState: { errors }, reset } = useForm();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset
+  } = useForm();
 
   const onSubmit = async (data) => {
     try {
-      await companiesAPI.create(data);
-      toast.success('Company added successfully');
+      setIsSubmitting(true);
+      console.log('Creating company with data:', data);
+      
+      const result = await companiesAPI.create({
+        name: data.name,
+        subscriptionStart: data.subscriptionStart,
+        subscriptionEnd: data.subscriptionEnd,
+        adminName: data.adminName,
+        adminEmail: data.adminEmail
+      });
+      
+      console.log('Company created successfully:', result);
+      toast.success('Company and admin user created successfully!');
       reset();
       onSuccess(); // Call the success callback
     } catch (error) {
       console.error('Failed to add company:', error);
       toast.error(error.message || 'Failed to add company');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleClose = () => {
-    reset();
-    onClose();
+    if (!isSubmitting) {
+      reset();
+      onClose();
+    }
   };
 
   // Set default dates
@@ -60,7 +81,8 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                 <h3 className="text-lg font-medium text-gray-900">Add New Company</h3>
                 <button
                   onClick={handleClose}
-                  className="text-gray-400 hover:text-gray-600"
+                  disabled={isSubmitting}
+                  className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
                 >
                   <SafeIcon icon={FiX} className="w-6 h-6" />
                 </button>
@@ -74,7 +96,7 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Company Name
+                        Company Name *
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -83,7 +105,8 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                         <input
                           {...register('name', { required: 'Company name is required' })}
                           type="text"
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          disabled={isSubmitting}
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
                           placeholder="Enter company name"
                         />
                       </div>
@@ -100,7 +123,7 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Start Date
+                        Start Date *
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -110,7 +133,8 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                           {...register('subscriptionStart', { required: 'Start date is required' })}
                           type="date"
                           defaultValue={today}
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          disabled={isSubmitting}
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
                         />
                       </div>
                       {errors.subscriptionStart && (
@@ -120,7 +144,7 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        End Date
+                        End Date *
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -130,7 +154,8 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                           {...register('subscriptionEnd', { required: 'End date is required' })}
                           type="date"
                           defaultValue={defaultEndDate}
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          disabled={isSubmitting}
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
                         />
                       </div>
                       {errors.subscriptionEnd && (
@@ -146,7 +171,7 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Admin Name
+                        Admin Name *
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -155,7 +180,8 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                         <input
                           {...register('adminName', { required: 'Admin name is required' })}
                           type="text"
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          disabled={isSubmitting}
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
                           placeholder="Enter admin full name"
                         />
                       </div>
@@ -166,14 +192,14 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Admin Email
+                        Admin Email *
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                           <SafeIcon icon={FiMail} className="h-5 w-5 text-gray-400" />
                         </div>
                         <input
-                          {...register('adminEmail', { 
+                          {...register('adminEmail', {
                             required: 'Admin email is required',
                             pattern: {
                               value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
@@ -181,7 +207,8 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                             }
                           })}
                           type="email"
-                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          disabled={isSubmitting}
+                          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50"
                           placeholder="Enter admin email"
                         />
                       </div>
@@ -197,15 +224,24 @@ function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                   <button
                     type="button"
                     onClick={handleClose}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    disabled={isSubmitting}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700"
+                    disabled={isSubmitting}
+                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Add Company
+                    {isSubmitting ? (
+                      <div className="flex items-center justify-center space-x-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Creating...</span>
+                      </div>
+                    ) : (
+                      'Add Company'
+                    )}
                   </button>
                 </div>
               </form>

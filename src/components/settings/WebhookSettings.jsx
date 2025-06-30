@@ -28,14 +28,23 @@ function WebhookSettings() {
       const url = webhookService.getWebhookUrl(companyId);
       setWebhookUrl(url);
       setIsListening(webhookService.getListeningStatus());
+      setIsSimulating(webhookService.getSimulationStatus());
       
       // Load webhook statistics
       loadWebhookStats();
     }
+
+    // Update status every 5 seconds
+    const statusInterval = setInterval(() => {
+      setIsListening(webhookService.getListeningStatus());
+      setIsSimulating(webhookService.getSimulationStatus());
+      loadWebhookStats();
+    }, 5000);
+
+    return () => clearInterval(statusInterval);
   }, [getUserCompanyId]);
 
   const loadWebhookStats = () => {
-    // This would come from your backend in production
     const stats = webhookService.getStats();
     setWebhookStats(stats);
   };
@@ -50,11 +59,12 @@ function WebhookSettings() {
       if (isListening) {
         webhookService.stopListening();
         setIsListening(false);
+        setIsSimulating(false);
         toast.success('Webhook listener stopped', { duration: 2000 });
       } else {
         webhookService.startListening(companyId);
         setIsListening(true);
-        toast.success('Webhook listener started - ready to receive calls!', { duration: 3000 });
+        toast.success('Webhook listener started - test call in 10 seconds!', { duration: 3000 });
       }
     } catch (error) {
       console.error('Failed to toggle webhook listener:', error);
@@ -99,19 +109,13 @@ function WebhookSettings() {
   };
 
   const testWebhook = () => {
-    // Simulate a test webhook call
-    const testCallerId = '+1234567890';
-    console.log('🧪 Simulating test webhook call...');
+    if (!isListening) {
+      toast.error('Please start webhook listener first');
+      return;
+    }
+
     const companyId = getUserCompanyId();
-    
-    webhookService.handleWebhookCall({
-      caller_id: testCallerId,
-      timestamp: new Date().toISOString(),
-      call_type: 'incoming',
-      webhook_id: `test-${Date.now()}`,
-      source: 'test_webhook'
-    }, companyId);
-    
+    webhookService.sendTestCall(companyId);
     toast.success('Test webhook call sent!', { duration: 2000 });
     loadWebhookStats();
   };
@@ -238,7 +242,7 @@ function WebhookSettings() {
             <div className="border border-gray-200 rounded-lg p-4">
               <h4 className="text-sm font-medium text-gray-900 mb-2">Test Webhook</h4>
               <p className="text-sm text-gray-500 mb-3">
-                Send a test webhook call to verify your integration.
+                Send a test webhook call immediately to verify your integration.
               </p>
               <button
                 onClick={testWebhook}
@@ -246,7 +250,7 @@ function WebhookSettings() {
                 className="inline-flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <SafeIcon icon={FiSettings} className="w-4 h-4" />
-                <span>Send Test Call</span>
+                <span>Send Test Call Now</span>
               </button>
               {!isListening && (
                 <p className="mt-2 text-sm text-red-600">
@@ -281,15 +285,35 @@ function WebhookSettings() {
             </div>
           </div>
 
-          {/* Integration Documentation */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          {/* Step-by-step Instructions */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <div className="flex">
               <SafeIcon icon={FiInfo} className="h-5 w-5 text-blue-400 mt-0.5" />
               <div className="ml-3">
                 <h4 className="text-sm font-medium text-blue-900 mb-2">
+                  Quick Testing Steps
+                </h4>
+                <div className="text-sm text-blue-700">
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li><strong>Start Listener:</strong> Click "Start Listener" - you'll get a test call in 10 seconds</li>
+                    <li><strong>Enable Simulation:</strong> Click "Start Simulation" for random calls every 1-3 minutes</li>
+                    <li><strong>Manual Test:</strong> Use "Send Test Call Now" for immediate testing</li>
+                    <li><strong>Answer Calls:</strong> When a call appears, test the address management features</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Integration Documentation */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div className="flex">
+              <SafeIcon icon={FiLink} className="h-5 w-5 text-gray-400 mt-0.5" />
+              <div className="ml-3">
+                <h4 className="text-sm font-medium text-gray-900 mb-2">
                   Webhook Request Format
                 </h4>
-                <p className="text-sm text-blue-700 mb-3">
+                <p className="text-sm text-gray-600 mb-3">
                   Your VoIP system should send a POST request with the following JSON payload:
                 </p>
                 <div className="bg-white rounded border p-3 font-mono text-sm">
@@ -302,7 +326,7 @@ function WebhookSettings() {
 }`}
                   </pre>
                 </div>
-                <div className="mt-3 space-y-1 text-xs text-blue-600">
+                <div className="mt-3 space-y-1 text-xs text-gray-600">
                   <p><strong>caller_id:</strong> Phone number in international format (required)</p>
                   <p><strong>timestamp:</strong> ISO 8601 timestamp (optional, defaults to now)</p>
                   <p><strong>call_type:</strong> Type of call, usually "incoming" (optional)</p>
@@ -315,7 +339,7 @@ function WebhookSettings() {
           {/* Current Status */}
           <div className="mt-6 bg-gray-50 rounded-lg p-4">
             <h4 className="text-sm font-medium text-gray-900 mb-2">Current Status</h4>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
                   Webhook Listener
@@ -332,27 +356,14 @@ function WebhookSettings() {
                   {isSimulating ? '🎭 Active - Generating test calls' : '⏸️ Inactive'}
                 </p>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Integration Guide */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <div className="flex">
-          <SafeIcon icon={FiLink} className="h-5 w-5 text-yellow-400" />
-          <div className="ml-3">
-            <h4 className="text-sm font-medium text-yellow-900">
-              Integration Steps for VoIP Developers
-            </h4>
-            <div className="mt-2 text-sm text-yellow-700">
-              <ol className="list-decimal list-inside space-y-1">
-                <li><strong>Copy the webhook URL</strong> above and provide it to your VoIP team</li>
-                <li><strong>Configure your VoIP system</strong> to send POST requests to this URL</li>
-                <li><strong>Include caller_id</strong> in the JSON payload for each incoming call</li>
-                <li><strong>Start the webhook listener</strong> in this interface</li>
-                <li><strong>Test</strong> with real calls or use the simulation feature</li>
-              </ol>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                  Total Calls Today
+                </label>
+                <p className="mt-1 text-sm text-purple-600">
+                  📞 {webhookStats.todayReceived} calls received
+                </p>
+              </div>
             </div>
           </div>
         </div>

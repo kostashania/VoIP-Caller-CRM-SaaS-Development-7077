@@ -24,8 +24,6 @@ class WebhookService {
 
   // Generate webhook URL for the company
   getWebhookUrl(companyId) {
-    // This would be your actual webhook endpoint
-    // For now, using a placeholder - you'll need to set up your actual webhook receiver
     const baseUrl = window.location.origin;
     return `${baseUrl}/api/webhook/incoming-call/${companyId}`;
   }
@@ -41,14 +39,18 @@ class WebhookService {
       this.isListening = true;
       console.log('🎧 Starting webhook listener for company:', companyId);
       
-      // For demo purposes, we'll simulate webhook calls
-      // In production, this would connect to your webhook event stream
-      this.simulateWebhookCalls(companyId);
+      // Send a test call after 10 seconds
+      setTimeout(() => {
+        if (this.isListening) {
+          console.log('📱 Sending test webhook call after 10 seconds...');
+          this.sendTestCall(companyId);
+        }
+      }, 10000);
       
       console.log('✅ Webhook listener started');
       console.log('📞 Webhook URL:', this.getWebhookUrl(companyId));
       
-      toast.success('Webhook listener started - ready to receive calls!', { duration: 3000 });
+      toast.success('Webhook listener started - test call in 10 seconds!', { duration: 3000 });
     } catch (error) {
       console.error('Failed to start webhook listener:', error);
       this.isListening = false;
@@ -81,6 +83,22 @@ class WebhookService {
     toast.success('Webhook listener stopped', { duration: 2000 });
   }
 
+  // Send a test call immediately
+  sendTestCall(companyId) {
+    console.log('🧪 Sending test webhook call...');
+    const testCallerId = '+1234567890';
+    
+    this.handleWebhookCall({
+      caller_id: testCallerId,
+      timestamp: new Date().toISOString(),
+      call_type: 'incoming',
+      webhook_id: `test-${Date.now()}`,
+      source: 'test_webhook'
+    }, companyId);
+    
+    toast.success('Test webhook call sent!', { duration: 2000 });
+  }
+
   // Start random simulation (every 1-3 minutes)
   startRandomSimulation(companyId) {
     if (this.isSimulating) {
@@ -95,7 +113,10 @@ class WebhookService {
       if (!this.isSimulating || !this.isListening) return;
 
       // Random delay between 1-3 minutes (60000-180000 ms)
-      const delay = Math.random() * 120000 + 60000;
+      const delayMinutes = Math.random() * 2 + 1; // 1-3 minutes
+      const delay = delayMinutes * 60000;
+
+      console.log(`⏰ Next random call scheduled in ${delayMinutes.toFixed(1)} minutes`);
 
       this.randomSimulationTimer = setTimeout(() => {
         if (this.isSimulating && this.isListening) {
@@ -115,12 +136,15 @@ class WebhookService {
       }, delay);
     };
 
-    // Start first call after 10 seconds
+    // Start first random call after 10 seconds
     setTimeout(() => {
       if (this.isSimulating && this.isListening) {
+        console.log('🚀 Starting random call schedule...');
         scheduleRandomCall();
       }
     }, 10000);
+
+    toast.success('Random simulation started - calls every 1-3 minutes', { duration: 3000 });
   }
 
   stopSimulation() {
@@ -132,43 +156,7 @@ class WebhookService {
     }
 
     console.log('🛑 Random simulation stopped');
-  }
-
-  // Simulate webhook calls for demo (existing method - kept for compatibility)
-  simulateWebhookCalls(companyId) {
-    const scheduleNextCall = () => {
-      if (!this.isListening) return;
-
-      // Random delay between 20-60 seconds for regular demo
-      const delay = Math.random() * 40000 + 20000;
-
-      this.simulationTimer = setTimeout(() => {
-        if (this.isListening) {
-          // Only trigger if random simulation is not running
-          if (!this.isSimulating) {
-            const callerId = this.getRandomCallerId();
-            console.log('📱 Demo webhook call from:', callerId);
-            
-            this.handleWebhookCall({
-              caller_id: callerId,
-              timestamp: new Date().toISOString(),
-              call_type: 'incoming',
-              webhook_id: `demo-${Date.now()}`,
-              source: 'demo_webhook'
-            }, companyId);
-          }
-          
-          scheduleNextCall();
-        }
-      }, delay);
-    };
-
-    // Start first call after 15 seconds
-    setTimeout(() => {
-      if (this.isListening) {
-        scheduleNextCall();
-      }
-    }, 15000);
+    toast.success('Random simulation stopped', { duration: 2000 });
   }
 
   getRandomCallerId() {
@@ -201,34 +189,44 @@ class WebhookService {
 
   // Main webhook handler - this is what processes incoming webhook calls
   async handleWebhookCall(webhookData, companyId) {
+    console.log('🔄 Processing webhook call with data:', webhookData);
+    console.log('🏢 Company ID:', companyId);
+
     const { setIncomingCall, addCallLog, incomingCall } = useCallStore.getState();
 
     // Don't handle new calls if there's already an active incoming call
     if (incomingCall) {
       console.log('📵 Webhook call blocked - another call is already active');
+      toast.warning('Call blocked - another call is active', { duration: 2000 });
       return { success: false, reason: 'Another call is already active' };
     }
 
     try {
-      console.log('📞 Processing webhook call:', webhookData);
-
       // Extract and clean caller ID
       const callerId = this.cleanCallerId(webhookData.caller_id);
+      console.log('📞 Cleaned caller ID:', callerId);
 
       // Check if caller exists in database
+      console.log('🔍 Looking for existing caller...');
       const existingCaller = await callersAPI.getByPhone(companyId, callerId);
+      console.log('👤 Existing caller found:', !!existingCaller);
 
       // Create call log entry
-      const callLog = await callLogsAPI.create({
+      console.log('📝 Creating call log entry...');
+      const callLogData = {
         company_id: companyId,
         caller_id: existingCaller?.id || null,
         caller_number: callerId,
         call_status: 'incoming',
         call_direction: 'inbound',
-        webhook_id: webhookData.webhook_id,
-        voip_raw_payload: webhookData,
+        webhook_id: webhookData.webhook_id || `webhook-${Date.now()}`,
+        voip_raw_payload: JSON.stringify(webhookData),
         timestamp: webhookData.timestamp || new Date().toISOString()
-      });
+      };
+
+      console.log('📝 Call log data:', callLogData);
+      const callLog = await callLogsAPI.create(callLogData);
+      console.log('✅ Call log created:', callLog);
 
       // Prepare incoming call data
       const incomingCallData = {
@@ -237,6 +235,8 @@ class WebhookService {
         webhookData: webhookData,
         isWebhookCall: true
       };
+
+      console.log('📱 Setting incoming call data:', incomingCallData);
 
       // Update UI state
       addCallLog(callLog);
@@ -248,11 +248,15 @@ class WebhookService {
       // Play notification sound
       this.playNotificationSound();
 
-      console.log('✅ Webhook call processed:', {
+      console.log('✅ Webhook call processed successfully:', {
         callerId,
         callerFound: !!existingCaller,
         callLogId: callLog.id
       });
+
+      // Show success notification
+      const callerName = existingCaller?.name || 'Unknown Caller';
+      toast.success(`📞 Incoming call from ${callerName} (${callerId})`, { duration: 3000 });
 
       return {
         success: true,
@@ -261,6 +265,7 @@ class WebhookService {
       };
     } catch (error) {
       console.error('❌ Failed to process webhook call:', error);
+      toast.error(`Failed to process call: ${error.message}`, { duration: 4000 });
       return {
         success: false,
         error: error.message
@@ -310,8 +315,9 @@ class WebhookService {
 
   updateStats() {
     this.stats.totalReceived += 1;
-    this.stats.todayReceived += 1; // In production, filter by today's date
+    this.stats.todayReceived += 1;
     this.stats.lastReceived = new Date().toISOString();
+    console.log('📊 Updated stats:', this.stats);
   }
 
   getListeningStatus() {
@@ -358,28 +364,7 @@ class WebhookService {
 // Export singleton instance
 export const webhookService = new WebhookService();
 
-// Auto-start when user is authenticated
-if (typeof window !== 'undefined') {
-  const checkAuthAndStart = () => {
-    const { user, getUserCompanyId } = useAuthStore.getState();
-    if (user && getUserCompanyId()) {
-      const companyId = getUserCompanyId();
-      console.log('🚀 Auto-starting webhook service for company:', companyId);
-      
-      // Auto-start webhook listening
-      setTimeout(() => {
-        try {
-          webhookService.startListening(companyId);
-          console.log('📞 Webhook service ready to receive calls');
-        } catch (error) {
-          console.error('Failed to auto-start webhook service:', error);
-        }
-      }, 2000);
-    }
-  };
-
-  // Check on load
-  setTimeout(checkAuthAndStart, 3000);
-}
+// Don't auto-start - let user control when to start
+console.log('🔧 Webhook service initialized - ready for manual start');
 
 export default WebhookService;
