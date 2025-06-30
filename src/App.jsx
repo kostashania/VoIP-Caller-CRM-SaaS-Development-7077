@@ -15,6 +15,7 @@ import CompanyManagement from './components/superadmin/CompanyManagement';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import IncomingCallPopup from './components/voip/IncomingCallPopup';
+import WebhookCallPopup from './components/voip/WebhookCallPopup';
 
 function App() {
   const { user } = useAuthStore();
@@ -23,7 +24,7 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-        <Toaster 
+        <Toaster
           position="top-right"
           toastOptions={{
             duration: 2000, // Shorter duration - 2 seconds instead of 4
@@ -40,8 +41,16 @@ function App() {
           }}
         />
 
-        {/* VoIP Incoming Call Popup */}
-        {incomingCall && <IncomingCallPopup />}
+        {/* VoIP/Webhook Incoming Call Popups */}
+        {incomingCall && (
+          <>
+            {incomingCall.isWebhookCall ? (
+              <WebhookCallPopup />
+            ) : (
+              <IncomingCallPopup />
+            )}
+          </>
+        )}
 
         <Routes>
           {/* Public Routes */}
@@ -55,13 +64,11 @@ function App() {
           />
 
           {/* Protected Routes */}
-          <Route 
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
+          <Route element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/caller/:id" element={<CallerDetails />} />
             <Route path="/settings" element={<Settings />} />

@@ -7,11 +7,12 @@ import SafeIcon from '../../common/SafeIcon';
 import { useAuthStore } from '../../store/authStore';
 import { voipAPI } from '../../services/supabaseAPI';
 import SipSettings from '../voip/SipSettings';
+import WebhookSettings from './WebhookSettings';
 
-const { FiSettings, FiPhone, FiGlobe, FiUser, FiLock, FiCheckCircle, FiAlertCircle } = FiIcons;
+const { FiSettings, FiPhone, FiGlobe, FiUser, FiLock, FiCheckCircle, FiAlertCircle, FiLink } = FiIcons;
 
 function Settings() {
-  const [activeTab, setActiveTab] = useState('sip');
+  const [activeTab, setActiveTab] = useState('webhook');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -123,6 +124,7 @@ function Settings() {
   };
 
   const tabs = [
+    { id: 'webhook', name: 'Webhook Settings', icon: FiLink },
     { id: 'sip', name: 'SIP/VoIP Settings', icon: FiPhone },
     { id: 'voip', name: 'Legacy VoIP', icon: FiGlobe },
     { id: 'profile', name: 'Profile', icon: FiUser },
@@ -169,6 +171,15 @@ function Settings() {
 
         {/* Tab Content */}
         <div className="p-6">
+          {activeTab === 'webhook' && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+            >
+              <WebhookSettings />
+            </motion.div>
+          )}
+
           {activeTab === 'sip' && (
             <motion.div
               initial={{ opacity: 0, x: 20 }}
@@ -311,10 +322,10 @@ function Settings() {
                       <div className="flex">
                         <div className="flex-shrink-0">
                           <SafeIcon 
-                            icon={connectionStatus.success ? FiCheckCircle : FiAlertCircle}
+                            icon={connectionStatus.success ? FiCheckCircle : FiAlertCircle} 
                             className={`h-5 w-5 ${
                               connectionStatus.success ? 'text-green-400' : 'text-red-400'
-                            }`}
+                            }`} 
                           />
                         </div>
                         <div className="ml-3">
@@ -347,6 +358,7 @@ function Settings() {
                         <SafeIcon icon={FiPhone} className="w-4 h-4" />
                         <span>{isTestingConnection ? 'Testing...' : 'Test Connection'}</span>
                       </button>
+
                       <button
                         type="submit"
                         className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700"
