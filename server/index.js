@@ -13,7 +13,6 @@ const __dirname = path.dirname(__filename);
 // Supabase configuration
 const SUPABASE_URL = 'https://smkhqyxtjrtavlzgjbqm.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNta2hxeXh0anJ0YXZsemdqYnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA5NzM1MjgsImV4cCI6MjA2NjU0OTUyOH0.qsEvNlujeYTu1aTIy2ne_sbYzl9XW5Wv1VrxLoYkjD4';
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const app = express();
@@ -42,12 +41,10 @@ io.on('connection', (socket) => {
 
   socket.on('join-company', (companyId) => {
     socket.join(`company-${companyId}`);
-    
     if (!companyConnections.has(companyId)) {
       companyConnections.set(companyId, new Set());
     }
     companyConnections.get(companyId).add(socket.id);
-    
     console.log(`Client ${socket.id} joined company ${companyId}`);
   });
 
@@ -148,13 +145,14 @@ app.post('/api/webhook/incoming-call/:companyId', async (req, res) => {
 app.post('/api/webhook/test/:companyId', async (req, res) => {
   try {
     const { companyId } = req.params;
-    
+
     // Send test call
     const testCallData = {
-      caller_id: '+1234567890',
+      caller_id: '+306912345678',
       timestamp: new Date().toISOString(),
       call_type: 'incoming',
-      source: 'test_api'
+      source: 'test_api',
+      webhook_id: 'test-' + Date.now()
     };
 
     // Process as webhook
@@ -167,12 +165,13 @@ app.post('/api/webhook/test/:companyId', async (req, res) => {
     });
 
     const result = await response.json();
-    
+
     res.json({
       success: true,
       message: 'Test webhook sent successfully',
       result
     });
+
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -189,7 +188,9 @@ app.get('/api/health', (req, res) => {
     connectedClients: Array.from(companyConnections.entries()).map(([companyId, sockets]) => ({
       companyId,
       connectedClients: sockets.size
-    }))
+    })),
+    webhookEndpoint: '/api/webhook/incoming-call/{companyId}',
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
@@ -211,9 +212,9 @@ function cleanCallerNumber(rawNumber) {
 }
 
 const PORT = process.env.PORT || 3000;
-
 server.listen(PORT, () => {
   console.log(`🚀 Webhook server running on port ${PORT}`);
-  console.log(`📞 Webhook endpoint: http://localhost:${PORT}/api/webhook/incoming-call/{companyId}`);
+  console.log(`📞 Production webhook endpoint: http://localhost:${PORT}/api/webhook/incoming-call/{companyId}`);
   console.log(`🧪 Test endpoint: http://localhost:${PORT}/api/webhook/test/{companyId}`);
+  console.log(`🌐 Health check: http://localhost:${PORT}/api/health`);
 });

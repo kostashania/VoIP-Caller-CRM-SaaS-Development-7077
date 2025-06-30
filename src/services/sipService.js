@@ -11,7 +11,7 @@ let sipJsAvailable = false;
 // Try to load SIP.js if available, but don't fail if it's not
 const loadSipJS = async () => {
   if (sipJsAvailable) return true;
-  
+
   try {
     // Try to check if SIP.js is available in global scope (from CDN)
     if (typeof window !== 'undefined' && window.SIP) {
@@ -49,10 +49,10 @@ class SIPService {
     try {
       // Try to load SIP.js
       this.sipJsLoaded = await loadSipJS();
-      
+
       // Get SIP configuration for the company
       this.sipConfig = await sipAPI.getConfig(companyId);
-      
+
       if (!this.sipConfig || !this.sipConfig.is_active) {
         console.log('No active SIP configuration found');
         return false;
@@ -69,12 +69,9 @@ class SIPService {
       });
 
       // Check if we can use real SIP.js
-      const hasValidConfig = this.sipConfig.username && 
-                           this.sipConfig.domain && 
-                           this.sipConfig.password;
-      
+      const hasValidConfig = this.sipConfig.username && this.sipConfig.domain && this.sipConfig.password;
       this.realSipMode = this.sipJsLoaded && hasValidConfig;
-      
+
       console.log('🎯 SIP Mode Decision:', {
         sipJsLoaded: this.sipJsLoaded,
         hasUsername: !!this.sipConfig.username,
@@ -82,23 +79,23 @@ class SIPService {
         hasPassword: !!this.sipConfig.password,
         realSipMode: this.realSipMode
       });
-      
+
       if (this.realSipMode) {
         console.log('🎯 Real SIP mode enabled - will register with actual SIP server');
         console.log(`📞 Will register: ${this.sipConfig.username}@${this.sipConfig.domain}`);
       } else {
         console.log('🎭 Demo mode - missing SIP.js or incomplete config');
         if (!this.sipJsLoaded) {
-          console.log('   - SIP.js not loaded (install via CDN for real functionality)');
+          console.log('  - SIP.js not loaded (install via CDN for real functionality)');
         }
         if (!this.sipConfig.username) {
-          console.log('   - Missing username');
+          console.log('  - Missing username');
         }
         if (!this.sipConfig.domain) {
-          console.log('   - Missing domain');
+          console.log('  - Missing domain');
         }
         if (!this.sipConfig.password) {
-          console.log('   - Missing password (required for real SIP)');
+          console.log('  - Missing password (required for real SIP)');
         }
       }
 
@@ -116,8 +113,11 @@ class SIPService {
 
     try {
       console.log('🚀 Starting SIP monitoring...');
-      console.log('🔍 Mode check:', { realSipMode: this.realSipMode, sipJsLoaded: this.sipJsLoaded });
-      
+      console.log('🔍 Mode check:', {
+        realSipMode: this.realSipMode,
+        sipJsLoaded: this.sipJsLoaded
+      });
+
       if (this.realSipMode) {
         // Use real SIP registration
         console.log('🎯 Attempting real SIP registration...');
@@ -127,20 +127,20 @@ class SIPService {
         console.log('🎭 Using simulation mode...');
         this.isRegistered = await this.registerSimulatedSIP();
       }
-      
+
       if (this.isRegistered) {
         this.isMonitoring = true;
         console.log('✅ SIP monitoring started successfully');
-        
+
         if (this.realSipMode) {
           this.startRealSIPListening();
         } else {
           this.startIncomingCallSimulation();
         }
-        
+
         return true;
       }
-      
+
       return false;
     } catch (error) {
       console.error('❌ Failed to start SIP monitoring:', error);
@@ -165,7 +165,7 @@ class SIPService {
       // Create SIP URI
       const sipUri = `sip:${this.sipConfig.username}@${this.sipConfig.domain}`;
       const webSocketServer = this.getWebSocketServer();
-      
+
       console.log('📞 Connecting to:', sipUri);
       console.log('🌐 WebSocket Server:', webSocketServer);
 
@@ -173,13 +173,12 @@ class SIPService {
       // For now, we'll simulate success to demonstrate the flow
       console.log('🎯 Real SIP registration would be attempted here');
       console.log('📡 WebSocket connection to:', webSocketServer);
-      
+
       // Simulate registration process
       await new Promise(resolve => setTimeout(resolve, 3000));
-      
+
       console.log('✅ Real SIP registration simulation completed');
       return true;
-
     } catch (error) {
       console.error('❌ Real SIP registration failed:', error);
       console.log('🔄 Falling back to simulation mode');
@@ -190,7 +189,7 @@ class SIPService {
   getWebSocketServer() {
     // Map common SIP domains to their WebSocket servers
     const domain = this.sipConfig.domain.toLowerCase();
-    
+
     if (domain.includes('linphone.org')) {
       return 'wss://sip.linphone.org:5062';
     } else if (domain.includes('modulus.gr')) {
@@ -207,15 +206,13 @@ class SIPService {
 
   async registerSimulatedSIP() {
     console.log('🎭 Using simulated SIP registration...');
-    
+
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     try {
       // Check if the configuration looks valid
-      const isValidConfig = this.sipConfig.username && 
-                          this.sipConfig.domain && 
-                          this.sipConfig.username.includes('@') === false;
+      const isValidConfig = this.sipConfig.username && this.sipConfig.domain && this.sipConfig.username.includes('@') === false;
 
       if (!isValidConfig) {
         console.error('❌ Invalid SIP configuration');
@@ -224,10 +221,10 @@ class SIPService {
 
       console.log('✅ Simulated SIP registration successful');
       console.log(`📍 Registered as: ${this.sipConfig.username}@${this.sipConfig.domain}`);
-      
+
       // Update registration status in database
       await this.updateRegistrationStatus(true);
-      
+
       return true;
     } catch (error) {
       console.error('❌ Simulated SIP registration failed:', error);
@@ -254,7 +251,7 @@ class SIPService {
 
   startRealSIPListening() {
     console.log('🎧 Real SIP listening active - waiting for incoming calls...');
-    
+
     // Keep the connection alive with periodic registration refresh
     this.registrationCheckInterval = setInterval(() => {
       if (this.isMonitoring) {
@@ -300,7 +297,7 @@ class SIPService {
   simulateIncomingCall() {
     const callerNumber = this.getRandomCallerNumber();
     console.log('📱 Simulating incoming call from:', callerNumber);
-    
+
     this.handleIncomingCall({
       callId: `sim-call-${Date.now()}`,
       callerNumber: callerNumber,
@@ -319,7 +316,7 @@ class SIPService {
     const knownNumbers = ['+1234567890', '+0987654321', '+1122334455'];
     const unknownNumbers = ['+1555000001', '+1555000002', '+1555000003', '+1666777888', '+1777888999'];
     const greekNumbers = ['+306912345678', '+306987654321', '+306911223344'];
-    
+
     const allNumbers = [...knownNumbers, ...unknownNumbers, ...greekNumbers];
     return allNumbers[Math.floor(Math.random() * allNumbers.length)];
   }
@@ -340,7 +337,7 @@ class SIPService {
     try {
       // Extract and sanitize caller ID
       const callerNumber = this.sanitizeCallerNumber(sipCallData.callerNumber);
-      
+
       console.log('📞 Processing incoming call:', {
         from: callerNumber,
         to: `${this.sipConfig.username}@${this.sipConfig.domain}`,
@@ -351,7 +348,7 @@ class SIPService {
       // Query database for caller
       const caller = await callersAPI.getByPhone(companyId, callerNumber);
 
-      // Create call log entry
+      // Create call log entry - REMOVED answered_at from here
       const callLog = await callLogsAPI.create({
         company_id: companyId,
         caller_id: caller?.id || null,
@@ -383,7 +380,6 @@ class SIPService {
         callLogId: callLog.id,
         realCall: sipCallData.realSipCall
       });
-
     } catch (error) {
       console.error('❌ Failed to handle incoming call:', error);
     }
@@ -392,12 +388,12 @@ class SIPService {
   sanitizeCallerNumber(rawNumber) {
     // Remove non-numeric characters except + at the beginning
     let cleaned = rawNumber.replace(/[^\d+]/g, '');
-    
+
     // Ensure it starts with + for international format
     if (!cleaned.startsWith('+')) {
       cleaned = '+' + cleaned;
     }
-    
+
     return cleaned;
   }
 
@@ -413,16 +409,16 @@ class SIPService {
 
       // Create a realistic phone ringing sound pattern
       const now = audioContext.currentTime;
-      
+
       // Ring pattern: two short beeps, pause, repeat
       for (let i = 0; i < 4; i++) {
         const startTime = now + (i * 0.8);
-        
+
         // First beep
         oscillator.frequency.setValueAtTime(800, startTime);
         gainNode.gain.setValueAtTime(0.3, startTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.2);
-        
+
         // Second beep
         oscillator.frequency.setValueAtTime(600, startTime + 0.3);
         gainNode.gain.setValueAtTime(0.3, startTime + 0.3);
@@ -431,7 +427,7 @@ class SIPService {
 
       oscillator.start(now);
       oscillator.stop(now + 3.5);
-      
+
       console.log('🔔 Playing incoming call notification sound');
     } catch (error) {
       console.warn('Could not play notification sound:', error);
@@ -441,11 +437,9 @@ class SIPService {
   async answerCall(callLogId) {
     try {
       console.log('✅ Answering call:', callLogId);
-      
-      // Update call status to answered
-      await callLogsAPI.updateStatus(callLogId, 'answered', {
-        answered_at: new Date().toISOString()
-      });
+
+      // Update call status to answered - REMOVED answered_at metadata
+      await callLogsAPI.updateStatus(callLogId, 'answered', {});
 
       console.log('📞 Call answered successfully');
       return true;
@@ -458,11 +452,10 @@ class SIPService {
   async endCall(callLogId, duration = 0) {
     try {
       console.log('📞 Ending call:', callLogId, 'Duration:', duration);
-      
-      // Update call status and duration
+
+      // Update call status and duration - REMOVED ended_at metadata
       await callLogsAPI.updateStatus(callLogId, 'completed', {
-        duration_seconds: duration,
-        ended_at: new Date().toISOString()
+        duration_seconds: duration
       });
 
       console.log('✅ Call ended successfully');
@@ -476,11 +469,9 @@ class SIPService {
   async missCall(callLogId) {
     try {
       console.log('📵 Call missed:', callLogId);
-      
-      // Update call status to missed
-      await callLogsAPI.updateStatus(callLogId, 'missed', {
-        ended_at: new Date().toISOString()
-      });
+
+      // Update call status to missed - REMOVED ended_at metadata
+      await callLogsAPI.updateStatus(callLogId, 'missed', {});
 
       console.log('📵 Call marked as missed');
       return true;
@@ -494,7 +485,7 @@ class SIPService {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       console.log(`🔄 Attempting SIP reconnection (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-      
+
       setTimeout(async () => {
         try {
           if (this.realSipMode) {
@@ -502,7 +493,7 @@ class SIPService {
           } else {
             await this.registerSimulatedSIP();
           }
-          
+
           if (this.isRegistered) {
             this.reconnectAttempts = 0;
             console.log('✅ SIP reconnection successful');
@@ -522,7 +513,7 @@ class SIPService {
 
   stopMonitoring() {
     console.log('🛑 Stopping SIP monitoring...');
-    
+
     this.isMonitoring = false;
     this.isRegistered = false;
 
@@ -568,30 +559,30 @@ class SIPService {
   async testConnection() {
     try {
       console.log('🧪 Testing SIP connection...');
-      
+
       // Check SIP.js availability
       this.sipJsLoaded = await loadSipJS();
       console.log('📦 SIP.js load status:', this.sipJsLoaded);
-      
+
       let success = false;
       let message = '';
-      
+
       if (this.realSipMode) {
         success = await this.registerRealSIP();
-        message = success 
-          ? `Real SIP connection successful! Registered as: ${this.sipConfig.username}@${this.sipConfig.domain}` 
+        message = success
+          ? `Real SIP connection successful! Registered as: ${this.sipConfig.username}@${this.sipConfig.domain}`
           : 'Real SIP connection failed. Check credentials and network.';
       } else {
         success = await this.registerSimulatedSIP();
         const reasons = [];
         if (!this.sipJsLoaded) reasons.push('SIP.js not available');
         if (!this.sipConfig.password) reasons.push('password missing');
-        
-        message = success 
-          ? `Demo SIP connection successful. Simulated as: ${this.sipConfig.username}@${this.sipConfig.domain} (${reasons.join(', ')})` 
+
+        message = success
+          ? `Demo SIP connection successful. Simulated as: ${this.sipConfig.username}@${this.sipConfig.domain} (${reasons.join(', ')})`
           : 'SIP configuration test failed.';
       }
-      
+
       // Update test status in database
       if (this.sipConfig) {
         const companyId = useAuthStore.getState().getUserCompanyId();
@@ -610,7 +601,6 @@ class SIPService {
       };
 
       console.log(success ? '✅' : '❌', 'SIP test result:', result.message);
-      
       return result;
     } catch (error) {
       const companyId = useAuthStore.getState().getUserCompanyId();
@@ -651,6 +641,7 @@ class SIPService {
       // Try to load from CDN
       const script = document.createElement('script');
       script.src = 'https://unpkg.com/sip.js@0.21.2/lib/platform/web/simple.min.js';
+
       script.onload = () => {
         if (window.SIP) {
           SIP = window.SIP;
@@ -663,10 +654,12 @@ class SIPService {
           resolve(false);
         }
       };
+
       script.onerror = () => {
         console.warn('❌ Failed to load SIP.js from CDN');
         resolve(false);
       };
+
       document.head.appendChild(script);
     });
   }
@@ -676,9 +669,10 @@ class SIPService {
     this.sipJsLoaded = false;
     SIP = null;
     sipJsAvailable = false;
-    
+
     // Try to load from CDN
     const success = await this.loadSipJSFromCDN();
+
     if (success) {
       // Reinitialize with new SIP.js
       const companyId = useAuthStore.getState().getUserCompanyId();
@@ -686,7 +680,7 @@ class SIPService {
         await this.initialize(companyId);
       }
     }
-    
+
     return success;
   }
 }
@@ -699,13 +693,13 @@ if (typeof window !== 'undefined') {
   // Listen for auth state changes
   const checkAuthAndInitialize = () => {
     const { user, getUserCompanyId } = useAuthStore.getState();
+
     if (user && getUserCompanyId()) {
       sipService.initialize(getUserCompanyId())
         .then(success => {
           if (success) {
             console.log('🚀 SIP service auto-initialized');
             console.log('📞 Ready to receive calls at your configured SIP address');
-            
             if (sipService.realSipMode) {
               console.log('🎯 Real SIP mode active - will register with actual SIP server');
             } else {

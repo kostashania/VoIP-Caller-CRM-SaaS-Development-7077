@@ -9,7 +9,7 @@ import { voipAPI } from '../../services/supabaseAPI';
 import SipSettings from '../voip/SipSettings';
 import WebhookSettings from './WebhookSettings';
 
-const { FiSettings, FiPhone, FiGlobe, FiUser, FiLock, FiCheckCircle, FiAlertCircle, FiLink } = FiIcons;
+const { FiSettings, FiPhone, FiGlobe, FiUser, FiLock, FiCheckCircle, FiAlertCircle, FiLink, FiTarget } = FiIcons;
 
 function Settings() {
   const [activeTab, setActiveTab] = useState('webhook');
@@ -124,7 +124,7 @@ function Settings() {
   };
 
   const tabs = [
-    { id: 'webhook', name: 'Webhook Settings', icon: FiLink },
+    { id: 'webhook', name: '🎯 Real Webhook Testing', icon: FiTarget },
     { id: 'sip', name: 'SIP/VoIP Settings', icon: FiPhone },
     { id: 'voip', name: 'Legacy VoIP', icon: FiGlobe },
     { id: 'profile', name: 'Profile', icon: FiUser },
@@ -164,6 +164,11 @@ function Settings() {
               >
                 <SafeIcon icon={tab.icon} className="w-5 h-5" />
                 <span>{tab.name}</span>
+                {tab.id === 'webhook' && (
+                  <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-bold">
+                    PRIORITY
+                  </span>
+                )}
               </button>
             ))}
           </nav>
@@ -322,10 +327,10 @@ function Settings() {
                       <div className="flex">
                         <div className="flex-shrink-0">
                           <SafeIcon 
-                            icon={connectionStatus.success ? FiCheckCircle : FiAlertCircle} 
+                            icon={connectionStatus.success ? FiCheckCircle : FiAlertCircle}
                             className={`h-5 w-5 ${
                               connectionStatus.success ? 'text-green-400' : 'text-red-400'
-                            }`} 
+                            }`}
                           />
                         </div>
                         <div className="ml-3">
@@ -346,7 +351,7 @@ function Settings() {
                     </div>
                   )}
 
-                  {/* Actions */}
+                  {/* Actions - Only show to admins */}
                   {hasRole('admin') && (
                     <div className="flex space-x-3">
                       <button
@@ -358,7 +363,6 @@ function Settings() {
                         <SafeIcon icon={FiPhone} className="w-4 h-4" />
                         <span>{isTestingConnection ? 'Testing...' : 'Test Connection'}</span>
                       </button>
-
                       <button
                         type="submit"
                         className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700"
