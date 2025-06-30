@@ -26,6 +26,29 @@ const ensureUUID = (id) => {
   return null; // Return null to trigger proper lookup
 };
 
+// Helper function to safely add timestamps
+const addTimestamps = (data, isUpdate = false) => {
+  const result = { ...data };
+  
+  if (!isUpdate) {
+    result.created_at = new Date().toISOString();
+  }
+  result.updated_at = new Date().toISOString();
+  
+  return result;
+};
+
+// Helper function to safely remove undefined fields
+const cleanData = (data) => {
+  const cleaned = {};
+  Object.keys(data).forEach(key => {
+    if (data[key] !== undefined && data[key] !== null) {
+      cleaned[key] = data[key];
+    }
+  });
+  return cleaned;
+};
+
 // Encryption helper (simplified for demo - use proper encryption in production)
 const encryptPassword = (password) => {
   // In production, use proper encryption like AES-256
@@ -247,10 +270,9 @@ export const sipAPI = {
         }
 
         const recordToUpdate = existingRecords[0];
-        const updateData = {
-          ...configToStore,
-          updated_at: new Date().toISOString()
-        };
+        const updateData = addTimestamps({
+          ...configToStore
+        }, true);
 
         if (!config.password && recordToUpdate.password_encrypted) {
           updateData.password_encrypted = recordToUpdate.password_encrypted;
@@ -260,7 +282,7 @@ export const sipAPI = {
 
         const { data, error } = await supabase
           .from('sip_configurations_crm_8x9p2k')
-          .update(updateData)
+          .update(cleanData(updateData))
           .eq('id', recordToUpdate.id)
           .select()
           .maybeSingle();
@@ -273,18 +295,16 @@ export const sipAPI = {
         result = data;
         console.log('SIP config updated successfully:', result);
       } else {
-        const insertData = {
+        const insertData = addTimestamps({
           company_id: validCompanyId,
-          ...configToStore,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
+          ...configToStore
+        });
 
         console.log('Creating new SIP config with:', insertData);
 
         const { data, error } = await supabase
           .from('sip_configurations_crm_8x9p2k')
-          .insert(insertData)
+          .insert(cleanData(insertData))
           .select()
           .maybeSingle();
 
@@ -324,12 +344,13 @@ export const sipAPI = {
         return;
       }
 
+      const updateData = addTimestamps({
+        ...testResult
+      }, true);
+
       const { error } = await supabase
         .from('sip_configurations_crm_8x9p2k')
-        .update({
-          ...testResult,
-          updated_at: new Date().toISOString()
-        })
+        .update(cleanData(updateData))
         .eq('id', existing.id);
 
       if (error) throw error;
@@ -467,11 +488,6 @@ export const callLogsAPI = {
   create: async (callData) => {
     try {
       console.log('Creating call log with data:', callData);
-      console.log('Company ID type check:', {
-        company_id: callData.company_id,
-        type: typeof callData.company_id,
-        isUUID: isValidUUID(callData.company_id)
-      });
 
       // Ensure we have a valid UUID for company_id
       let validCompanyId = callData.company_id;
@@ -518,7 +534,7 @@ export const callLogsAPI = {
 
       const { data, error } = await supabase
         .from('call_logs_crm_8x9p2k')
-        .insert(cleanCallData)
+        .insert(cleanData(cleanCallData))
         .select('*')
         .single();
 
@@ -558,7 +574,7 @@ export const callLogsAPI = {
 
       const { data, error } = await supabase
         .from('call_logs_crm_8x9p2k')
-        .update(cleanMetadata)
+        .update(cleanData(cleanMetadata))
         .eq('id', id)
         .select('*')
         .single();
@@ -661,20 +677,18 @@ export const companiesAPI = {
       console.log('🚀 Creating company with data:', companyData);
 
       // Step 1: Create company
-      const companyInsertData = {
+      const companyInsertData = addTimestamps({
         name: companyData.name,
         subscription_start: companyData.subscriptionStart,
         subscription_end: companyData.subscriptionEnd,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+        is_active: true
+      });
 
       console.log('📝 Inserting company data:', companyInsertData);
 
       const { data: company, error: companyError } = await supabase
         .from('companies_crm_8x9p2k')
-        .insert(companyInsertData)
+        .insert(cleanData(companyInsertData))
         .select()
         .single();
 
@@ -686,22 +700,20 @@ export const companiesAPI = {
       console.log('✅ Company created successfully:', company);
 
       // Step 2: Create admin user
-      const userInsertData = {
+      const userInsertData = addTimestamps({
         email: companyData.adminEmail,
         name: companyData.adminName,
         role: 'admin',
         company_id: company.id,
         password_hash: companyData.adminPassword ? encryptPassword(companyData.adminPassword) : encryptPassword('admin123'),
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+        is_active: true
+      });
 
       console.log('📝 Creating admin user with data:', { ...userInsertData, password_hash: '[ENCRYPTED]' });
 
       const { data: adminUser, error: userError } = await supabase
         .from('users_crm_8x9p2k')
-        .insert(userInsertData)
+        .insert(cleanData(userInsertData))
         .select()
         .single();
 
@@ -740,12 +752,13 @@ export const companiesAPI = {
     try {
       console.log('📝 Updating company:', id, 'with data:', companyData);
 
+      const updateData = addTimestamps({
+        ...companyData
+      }, true);
+
       const { data, error } = await supabase
         .from('companies_crm_8x9p2k')
-        .update({
-          ...companyData,
-          updated_at: new Date().toISOString()
-        })
+        .update(cleanData(updateData))
         .eq('id', id)
         .select()
         .single();
@@ -809,13 +822,14 @@ export const voipAPI = {
     try {
       const validCompanyId = ensureUUID(companyId) || companyId;
 
+      const updateData = addTimestamps({
+        company_id: validCompanyId,
+        ...settings
+      });
+
       const { data, error } = await supabase
         .from('voip_settings_crm_8x9p2k')
-        .upsert({
-          company_id: validCompanyId,
-          ...settings,
-          updated_at: new Date().toISOString()
-        })
+        .upsert(cleanData(updateData))
         .select()
         .single();
 
@@ -839,14 +853,15 @@ export const voipAPI = {
       };
 
       const validCompanyId = ensureUUID(companyId) || companyId;
+      const updateData = addTimestamps({
+        company_id: validCompanyId,
+        last_test_status: result.success ? 'success' : 'failed',
+        last_test_at: result.tested_at
+      });
+
       await supabase
         .from('voip_settings_crm_8x9p2k')
-        .upsert({
-          company_id: validCompanyId,
-          last_test_status: result.success ? 'success' : 'failed',
-          last_test_at: result.tested_at,
-          updated_at: new Date().toISOString()
-        });
+        .upsert(cleanData(updateData));
 
       return result;
     } catch (error) {
@@ -914,13 +929,11 @@ export const usersAPI = {
         insertData.company_id = ensureUUID(insertData.company_id) || insertData.company_id;
       }
 
+      const timestampedData = addTimestamps(insertData);
+
       const { data, error } = await supabase
         .from('users_crm_8x9p2k')
-        .insert({
-          ...insertData,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
+        .insert(cleanData(timestampedData))
         .select()
         .single();
 
@@ -952,12 +965,11 @@ export const usersAPI = {
         updateData.company_id = ensureUUID(updateData.company_id) || updateData.company_id;
       }
 
+      const timestampedData = addTimestamps(updateData, true);
+
       const { data, error } = await supabase
         .from('users_crm_8x9p2k')
-        .update({
-          ...updateData,
-          updated_at: new Date().toISOString()
-        })
+        .update(cleanData(timestampedData))
         .eq('id', id)
         .select()
         .single();
@@ -1132,14 +1144,14 @@ export const callersAPI = {
         }
       }
 
+      const timestampedData = addTimestamps({
+        ...insertData,
+        is_active: true
+      });
+
       const { data, error } = await supabase
         .from('callers_crm_8x9p2k')
-        .insert({
-          ...insertData,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
+        .insert(cleanData(timestampedData))
         .select()
         .single();
 
@@ -1166,12 +1178,11 @@ export const callersAPI = {
         updateData.company_id = ensureUUID(updateData.company_id) || updateData.company_id;
       }
 
+      const timestampedData = addTimestamps(updateData, true);
+
       const { data, error } = await supabase
         .from('callers_crm_8x9p2k')
-        .update({
-          ...updateData,
-          updated_at: new Date().toISOString()
-        })
+        .update(cleanData(timestampedData))
         .eq('id', id)
         .select()
         .single();
@@ -1214,13 +1225,11 @@ export const addressesAPI = {
     try {
       console.log('Creating address with data:', addressData);
 
+      const timestampedData = addTimestamps(addressData);
+
       const { data, error } = await supabase
         .from('addresses_crm_8x9p2k')
-        .insert({
-          ...addressData,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
+        .insert(cleanData(timestampedData))
         .select()
         .single();
 
@@ -1241,12 +1250,11 @@ export const addressesAPI = {
     try {
       console.log('Updating address:', id, 'with data:', addressData);
 
+      const timestampedData = addTimestamps(addressData, true);
+
       const { data, error } = await supabase
         .from('addresses_crm_8x9p2k')
-        .update({
-          ...addressData,
-          updated_at: new Date().toISOString()
-        })
+        .update(cleanData(timestampedData))
         .eq('id', id)
         .select()
         .single();

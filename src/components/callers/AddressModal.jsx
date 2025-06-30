@@ -10,6 +10,7 @@ const { FiX, FiMapPin, FiTag, FiFileText, FiPhone } = FiIcons;
 
 function AddressModal({ isOpen, onClose, callerId, address, onSubmit }) {
   const isEditing = !!address;
+  
   const { register, handleSubmit, formState: { errors }, reset } = useForm({
     defaultValues: {
       label: address?.label || 'Home',
@@ -57,13 +58,37 @@ function AddressModal({ isOpen, onClose, callerId, address, onSubmit }) {
       onClose();
     } catch (error) {
       console.error(`Failed to ${isEditing ? 'update' : 'add'} address:`, error);
-      toast.error(error.message || `Failed to ${isEditing ? 'update' : 'add'} address`);
+      
+      // Handle specific duplicate key error
+      if (error.message.includes('duplicate') || error.message.includes('unique') || error.message.includes('already exists')) {
+        toast.error(`Address label "${data.label}" already exists for this customer. Please choose a different label.`);
+      } else {
+        toast.error(error.message || `Failed to ${isEditing ? 'update' : 'add'} address`);
+      }
     }
   };
 
   const handleClose = () => {
     reset();
     onClose();
+  };
+
+  // Generate unique label suggestions
+  const getAvailableLabels = () => {
+    const baseLabels = [
+      { value: 'Home', icon: '🏠', desc: 'Primary residence' },
+      { value: 'Work', icon: '🏢', desc: 'Office or workplace' },
+      { value: 'Office', icon: '🏬', desc: 'Business office' },
+      { value: 'Home2', icon: '🏡', desc: 'Secondary home' },
+      { value: 'Warehouse', icon: '🏭', desc: 'Storage facility' },
+      { value: 'Store', icon: '🏪', desc: 'Retail location' },
+      { value: 'Factory', icon: '🏭', desc: 'Manufacturing site' },
+      { value: 'Branch', icon: '🏢', desc: 'Branch office' },
+      { value: 'Depot', icon: '📦', desc: 'Distribution center' },
+      { value: 'Other', icon: '📍', desc: 'Custom location' }
+    ];
+
+    return baseLabels;
   };
 
   return (
@@ -104,7 +129,7 @@ function AddressModal({ isOpen, onClose, callerId, address, onSubmit }) {
               <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Label
+                    Address Label
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -114,23 +139,24 @@ function AddressModal({ isOpen, onClose, callerId, address, onSubmit }) {
                       {...register('label', { required: 'Label is required' })}
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     >
-                      <option value="Home">🏠 Home</option>
-                      <option value="Work">🏢 Work</option>
-                      <option value="Office">🏬 Office</option>
-                      <option value="Home 2">🏡 Home 2</option>
-                      <option value="Warehouse">🏭 Warehouse</option>
-                      <option value="Store">🏪 Store</option>
-                      <option value="Other">📍 Other</option>
+                      {getAvailableLabels().map((labelOption) => (
+                        <option key={labelOption.value} value={labelOption.value}>
+                          {labelOption.icon} {labelOption.value} - {labelOption.desc}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   {errors.label && (
                     <p className="mt-1 text-sm text-red-600">{errors.label.message}</p>
                   )}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Choose a unique label for this address. If the label already exists, please select a different one.
+                  </p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Address
+                    Full Address
                   </label>
                   <div className="relative">
                     <div className="absolute top-3 left-0 pl-3 flex items-start pointer-events-none">
@@ -140,7 +166,7 @@ function AddressModal({ isOpen, onClose, callerId, address, onSubmit }) {
                       {...register('address', { required: 'Address is required' })}
                       rows={3}
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Enter full address"
+                      placeholder="Enter the complete address with street, city, postal code"
                     />
                   </div>
                   {errors.address && (
@@ -160,14 +186,14 @@ function AddressModal({ isOpen, onClose, callerId, address, onSubmit }) {
                       {...register('phone')}
                       type="tel"
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Phone number for this address"
+                      placeholder="Phone number specific to this address"
                     />
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Comments (Optional)
+                    Special Instructions (Optional)
                   </label>
                   <div className="relative">
                     <div className="absolute top-3 left-0 pl-3 flex items-start pointer-events-none">
@@ -177,7 +203,7 @@ function AddressModal({ isOpen, onClose, callerId, address, onSubmit }) {
                       {...register('comment')}
                       rows={2}
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Any special instructions or notes"
+                      placeholder="Delivery instructions, access codes, landmarks, etc."
                     />
                   </div>
                 </div>
