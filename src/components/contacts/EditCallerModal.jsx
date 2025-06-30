@@ -1,77 +1,38 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
-import { useCallerStore } from '../../store/callerStore';
-import { useAuthStore } from '../../store/authStore';
-import { callersAPI, addressesAPI } from '../../services/supabaseAPI';
+import { callersAPI } from '../../services/supabaseAPI';
 
-const { FiX, FiUser, FiPhone, FiFileText, FiMapPin } = FiIcons;
+const { FiX, FiUser, FiPhone, FiFileText } = FiIcons;
 
-function AddCallerModal({ isOpen, onClose, onSuccess }) {
-  const { addCaller } = useCallerStore();
-  const { getUserCompanyId } = useAuthStore();
-  const { register, handleSubmit, formState: { errors }, reset } = useForm();
+function EditCallerModal({ isOpen, onClose, caller, onSuccess }) {
+  const { register, handleSubmit, formState: { errors }, reset, setValue } = useForm();
+
+  useEffect(() => {
+    if (caller) {
+      setValue('name', caller.name);
+      setValue('phoneNumber', caller.phone_number);
+      setValue('note', caller.global_note || '');
+    }
+  }, [caller, setValue]);
 
   const onSubmit = async (data) => {
     try {
-      const companyId = getUserCompanyId();
-      if (!companyId) {
-        throw new Error('No company ID found');
-      }
-
-      console.log('Creating caller with data:', data);
-
-      // Create caller
-      const newCaller = await callersAPI.create({
-        company_id: companyId,
-        phone_number: data.phoneNumber,
+      await callersAPI.update(caller.id, {
         name: data.name,
+        phone_number: data.phoneNumber,
         global_note: data.note || ''
       });
 
-      console.log('Caller created:', newCaller);
-
-      // Create default address if provided
-      if (data.address && data.address.trim()) {
-        try {
-          console.log('Creating default address for caller:', newCaller.id);
-          const newAddress = await addressesAPI.create({
-            caller_id: newCaller.id,
-            label: 'Home',
-            address: data.address.trim(),
-            phone: data.phoneNumber,
-            is_primary: true
-          });
-
-          console.log('Address created:', newAddress);
-
-          // Add the address to the caller object
-          newCaller.addresses = [newAddress];
-        } catch (addressError) {
-          console.error('Failed to create address:', addressError);
-          // Don't fail the whole operation if address creation fails
-          toast.warning('Caller created but address creation failed');
-        }
-      } else {
-        // Initialize with empty addresses array
-        newCaller.addresses = [];
-      }
-
-      addCaller(newCaller);
-      toast.success('Contact added successfully');
+      toast.success('Contact updated successfully');
       reset();
-      
-      if (onSuccess) {
-        onSuccess();
-      } else {
-        onClose();
-      }
+      onSuccess();
     } catch (error) {
-      console.error('Failed to add caller:', error);
-      toast.error(error.message || 'Failed to add contact');
+      console.error('Failed to update caller:', error);
+      toast.error(error.message || 'Failed to update contact');
     }
   };
 
@@ -103,7 +64,7 @@ function AddCallerModal({ isOpen, onClose, onSuccess }) {
             >
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-medium text-gray-900">Add New Contact</h3>
+                <h3 className="text-lg font-medium text-gray-900">Edit Contact</h3>
                 <button
                   onClick={handleClose}
                   className="text-gray-400 hover:text-gray-600"
@@ -126,7 +87,7 @@ function AddCallerModal({ isOpen, onClose, onSuccess }) {
                       {...register('name', { required: 'Name is required' })}
                       type="text"
                       className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Enter contact name"
+                      placeholder="Enter caller name"
                     />
                   </div>
                   {errors.name && (
@@ -162,23 +123,6 @@ function AddCallerModal({ isOpen, onClose, onSuccess }) {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Primary Address (Optional)
-                  </label>
-                  <div className="relative">
-                    <div className="absolute top-3 left-0 pl-3 flex items-start pointer-events-none">
-                      <SafeIcon icon={FiMapPin} className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <textarea
-                      {...register('address')}
-                      rows={2}
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Enter primary address (will be labeled as 'Home')"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Notes (Optional)
                   </label>
                   <div className="relative">
@@ -207,7 +151,7 @@ function AddCallerModal({ isOpen, onClose, onSuccess }) {
                     type="submit"
                     className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700"
                   >
-                    Add Contact
+                    Update Contact
                   </button>
                 </div>
               </form>
@@ -219,4 +163,4 @@ function AddCallerModal({ isOpen, onClose, onSuccess }) {
   );
 }
 
-export default AddCallerModal;
+export default EditCallerModal;

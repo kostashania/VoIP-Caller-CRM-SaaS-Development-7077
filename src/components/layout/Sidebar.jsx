@@ -5,7 +5,7 @@ import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
 import { useAuthStore } from '../../store/authStore';
 
-const { FiPhone, FiHome, FiUsers, FiSettings, FiBriefcase, FiPhoneCall, FiMenu, FiX } = FiIcons;
+const { FiPhone, FiHome, FiUsers, FiSettings, FiBriefcase, FiPhoneCall, FiMenu, FiX, FiBookOpen } = FiIcons;
 
 function Sidebar() {
   const location = useLocation();
@@ -13,9 +13,30 @@ function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: FiHome, current: location.pathname === '/dashboard' },
-    { name: 'Call History', href: '/calls', icon: FiPhoneCall, current: location.pathname === '/calls' },
-    { name: 'Settings', href: '/settings', icon: FiSettings, current: location.pathname === '/settings' },
+    {
+      name: 'Dashboard',
+      href: '/dashboard',
+      icon: FiHome,
+      current: location.pathname === '/dashboard'
+    },
+    {
+      name: 'Call History',
+      href: '/calls',
+      icon: FiPhoneCall,
+      current: location.pathname === '/calls'
+    },
+    {
+      name: 'Contacts',
+      href: '/contacts',
+      icon: FiBookOpen,
+      current: location.pathname === '/contacts'
+    },
+    {
+      name: 'Settings',
+      href: '/settings',
+      icon: FiSettings,
+      current: location.pathname === '/settings'
+    },
   ];
 
   // Add admin-only routes
@@ -55,7 +76,6 @@ function Sidebar() {
           </div>
         </div>
       </div>
-      
       <nav className="flex flex-1 flex-col">
         <ul role="list" className="flex flex-1 flex-col gap-y-7">
           <li>
@@ -123,7 +143,7 @@ function Sidebar() {
               className="fixed inset-0 z-40 bg-black bg-opacity-25 lg:hidden"
               onClick={closeMobileMenu}
             />
-            
+
             {/* Sidebar */}
             <motion.div
               initial={{ x: -280 }}

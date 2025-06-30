@@ -9,6 +9,8 @@ import Login from './components/auth/Login';
 import Register from './components/auth/Register';
 import Dashboard from './components/dashboard/Dashboard';
 import CallerDetails from './components/callers/CallerDetails';
+import CallHistory from './components/calls/CallHistory';
+import ContactsManagement from './components/contacts/ContactsManagement';
 import Settings from './components/settings/Settings';
 import UserManagement from './components/admin/UserManagement';
 import CompanyManagement from './components/superadmin/CompanyManagement';
@@ -63,6 +65,8 @@ function App() {
             }
           >
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/calls" element={<CallHistory />} />
+            <Route path="/contacts" element={<ContactsManagement />} />
             <Route path="/caller/:id" element={<CallerDetails />} />
             <Route path="/settings" element={<Settings />} />
             <Route
