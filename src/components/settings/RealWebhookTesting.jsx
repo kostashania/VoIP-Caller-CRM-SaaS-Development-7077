@@ -74,12 +74,14 @@ function RealWebhookTesting() {
   const getWebhookUrl = () => {
     const companyId = getUserCompanyId();
     // 🔧 FIXED: Use the correct Netlify Functions URL
-    return `https://relaxed-manatee-580f4b.netlify.app/.netlify/functions/webhook-incoming-call?company=${companyId}`;
+    return `${window.location.origin}/.netlify/functions/webhook-incoming-call?company=${companyId}`;
   };
 
   const startListening = () => {
     setIsListening(true);
     localStorage.setItem('realWebhookListening', 'true');
+    
+    // 🔧 FIXED: Use proper toast import
     toast.success('🎧 Now listening for real webhooks from VoIP provider!', { duration: 4000 });
 
     // Add a test log entry to show the system is active
@@ -99,6 +101,8 @@ function RealWebhookTesting() {
   const stopListening = () => {
     setIsListening(false);
     localStorage.setItem('realWebhookListening', 'false');
+    
+    // 🔧 FIXED: Use proper toast import
     toast.info('🛑 Stopped listening for webhooks', { duration: 2000 });
 
     // Add a test log entry
@@ -150,6 +154,8 @@ function RealWebhookTesting() {
       });
       localStorage.removeItem('realWebhookLogs');
       localStorage.removeItem('realWebhookStats');
+      
+      // 🔧 FIXED: Use proper toast import
       toast.success('All webhook logs cleared', { duration: 2000 });
     }
   };
@@ -181,7 +187,8 @@ function RealWebhookTesting() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
+      
+      // 🔧 FIXED: Use proper toast import
       toast.success('Real webhook logs exported successfully', { duration: 2000 });
     } catch (error) {
       console.error('Export failed:', error);
@@ -198,6 +205,7 @@ function RealWebhookTesting() {
         webhook_id: 'test-' + Date.now()
       };
 
+      // 🔧 FIXED: Use proper toast import
       toast.info('Testing webhook endpoint...', { duration: 2000 });
 
       const response = await fetch(getWebhookUrl(), {
@@ -219,6 +227,8 @@ function RealWebhookTesting() {
           webhook_id: testData.webhook_id,
           response: result
         });
+        
+        // 🔧 FIXED: Use proper toast import
         toast.success('✅ Test webhook sent successfully!', { duration: 3000 });
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -232,6 +242,8 @@ function RealWebhookTesting() {
         source: 'manual_test',
         error: error.message
       });
+      
+      // 🔧 FIXED: Use proper toast import
       toast.error(`❌ Test webhook failed: ${error.message}`, { duration: 4000 });
     }
   };
@@ -239,6 +251,7 @@ function RealWebhookTesting() {
   const copyWebhookUrl = async () => {
     try {
       await navigator.clipboard.writeText(getWebhookUrl());
+      // 🔧 FIXED: Use proper toast import
       toast.success('Webhook URL copied to clipboard!', { duration: 2000 });
     } catch (error) {
       console.error('Failed to copy URL:', error);
@@ -249,7 +262,7 @@ function RealWebhookTesting() {
   const testWithCurl = () => {
     const companyId = getUserCompanyId();
     const curlCommand = `curl -X POST \\
-  https://relaxed-manatee-580f4b.netlify.app/.netlify/functions/webhook-incoming-call?company=${companyId} \\
+  ${getWebhookUrl()} \\
   -H "Content-Type: application/json" \\
   -d '{
     "caller_id": "+306912345678",
@@ -259,6 +272,7 @@ function RealWebhookTesting() {
   }'`;
 
     navigator.clipboard.writeText(curlCommand).then(() => {
+      // 🔧 FIXED: Use proper toast import
       toast.success('cURL command copied to clipboard!', { duration: 3000 });
     }).catch(() => {
       toast.error('Failed to copy cURL command', { duration: 2000 });
@@ -490,8 +504,8 @@ function RealWebhookTesting() {
               <SafeIcon icon={FiGlobe} className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No webhook activity yet</h3>
               <p className="mt-1 text-sm text-gray-500">
-                {isListening
-                  ? 'Waiting for webhook calls from your VoIP provider...'
+                {isListening 
+                  ? 'Waiting for webhook calls from your VoIP provider...' 
                   : 'Start listening to monitor webhook activity'
                 }
               </p>

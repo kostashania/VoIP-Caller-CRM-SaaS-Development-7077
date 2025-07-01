@@ -89,15 +89,19 @@ function WebhookTester() {
       console.log('🎯 Testing health URL:', healthUrl);
 
       const startTime = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
       const response = await fetch(healthUrl, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache'
         },
-        signal: AbortSignal.timeout(30000) // 30 second timeout
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
       const responseTime = Date.now() - startTime;
       const isSuccess = response.ok;
 
@@ -163,7 +167,7 @@ function WebhookTester() {
         error: error.message
       });
 
-      if (error.name === 'TimeoutError') {
+      if (error.name === 'AbortError') {
         toast.error(`❌ Health check timed out (30s)`, { duration: 4000 });
       } else if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
         toast.error(`❌ Network error: Functions not deployed or inaccessible`, { duration: 4000 });
@@ -195,6 +199,9 @@ function WebhookTester() {
       console.log('📞 Test data:', testData);
 
       const startTime = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
@@ -203,9 +210,10 @@ function WebhookTester() {
           'Cache-Control': 'no-cache'
         },
         body: JSON.stringify(testData),
-        signal: AbortSignal.timeout(30000) // 30 second timeout
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
       const responseTime = Date.now() - startTime;
       const isSuccess = response.ok;
 
@@ -274,7 +282,7 @@ function WebhookTester() {
         error: error.message
       });
 
-      if (error.name === 'TimeoutError') {
+      if (error.name === 'AbortError') {
         toast.error(`❌ Webhook test timed out (30s)`, { duration: 4000 });
       } else if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
         toast.error(`❌ Network error: Functions not deployed or inaccessible`, { duration: 4000 });
@@ -311,14 +319,19 @@ function WebhookTester() {
           source: 'batch_test'
         };
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for batch
+
         const response = await fetch(getWebhookUrl(), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(testData),
-          signal: AbortSignal.timeout(15000) // 15 second timeout for batch
+          signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         addTestLog({
           type: 'batch',
@@ -476,7 +489,6 @@ function WebhookTester() {
         </div>
       </div>
 
-      {/* Rest of the component remains the same... */}
       {/* Header */}
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 sm:p-6">
