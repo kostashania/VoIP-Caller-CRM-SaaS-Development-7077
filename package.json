@@ -16,7 +16,9 @@
     "server:start": "cd server && npm start",
     "netlify:dev": "netlify dev",
     "netlify:build": "npm run build",
-    "netlify:functions:build": "npm run build"
+    "netlify:functions:build": "npm run build",
+    "functions:deploy": "netlify deploy --functions",
+    "deploy": "netlify deploy --prod"
   },
   "dependencies": {
     "@questlabs/react-sdk": "^2.1.9",

@@ -37,9 +37,12 @@ exports.handler = async (event, context) => {
         .from('companies_crm_8x9p2k')
         .select('count')
         .limit(1);
-      
+
       supabaseStatus = error ? 'error' : 'connected';
-      console.log('📊 Supabase test result:', { supabaseStatus, error: error?.message });
+      console.log('📊 Supabase test result:', {
+        supabaseStatus,
+        error: error?.message
+      });
     } catch (supabaseError) {
       console.error('❌ Supabase connection error:', supabaseError);
       supabaseStatus = 'error';
@@ -73,7 +76,6 @@ exports.handler = async (event, context) => {
     };
 
     console.log('✅ Health check successful');
-
     return {
       statusCode: 200,
       headers,

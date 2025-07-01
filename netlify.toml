@@ -5,6 +5,12 @@
 [build.environment]
   NODE_VERSION = "18"
 
+# Configure Netlify Functions
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  
+# Function redirects
 [[redirects]]
   from = "/.netlify/functions/*"
   to = "/.netlify/functions/:splat"
@@ -15,11 +21,8 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# SPA fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"

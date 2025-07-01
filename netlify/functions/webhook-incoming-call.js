@@ -60,7 +60,7 @@ exports.handler = async (event, context) => {
       if (!bodyText) {
         throw new Error('Empty request body');
       }
-      
+
       webhookData = JSON.parse(bodyText);
       console.log('📞 Parsed webhook data:', webhookData);
     } catch (parseError) {
@@ -89,7 +89,6 @@ exports.handler = async (event, context) => {
     // Check if caller exists
     console.log('🔍 Looking for existing caller...');
     let existingCaller = null;
-    
     try {
       const { data, error: callerError } = await supabase
         .from('callers_crm_8x9p2k')
@@ -165,7 +164,6 @@ exports.handler = async (event, context) => {
     };
 
     console.log('🎉 Webhook processed successfully');
-
     return {
       statusCode: 200,
       headers,
@@ -174,7 +172,7 @@ exports.handler = async (event, context) => {
 
   } catch (error) {
     console.error('💥 Webhook processing failed:', error);
-    
+
     const errorResponse = {
       success: false,
       error: error.message || 'Webhook processing failed',

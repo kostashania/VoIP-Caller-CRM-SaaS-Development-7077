@@ -62,9 +62,8 @@ function RealWebhookTesting() {
 
       // Check if there are any new webhook calls in the last 30 seconds
       const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
-      
       console.log('🔍 Checking for new webhooks since:', thirtySecondsAgo);
-      
+
       // You could implement this by querying your call_logs table for recent entries
       // that were created via webhook (have voip_raw_payload with webhook data)
     } catch (error) {
@@ -74,16 +73,14 @@ function RealWebhookTesting() {
 
   const getWebhookUrl = () => {
     const companyId = getUserCompanyId();
-    return `https://relaxed-manatee-580f4b.netlify.app/api/webhook/incoming-call/${companyId}`;
+    // 🔧 FIXED: Use the correct Netlify Functions URL
+    return `https://relaxed-manatee-580f4b.netlify.app/.netlify/functions/webhook-incoming-call?company=${companyId}`;
   };
 
   const startListening = () => {
     setIsListening(true);
     localStorage.setItem('realWebhookListening', 'true');
-    
-    toast.success('🎧 Now listening for real webhooks from VoIP provider!', {
-      duration: 4000
-    });
+    toast.success('🎧 Now listening for real webhooks from VoIP provider!', { duration: 4000 });
 
     // Add a test log entry to show the system is active
     addWebhookLog({
@@ -102,10 +99,7 @@ function RealWebhookTesting() {
   const stopListening = () => {
     setIsListening(false);
     localStorage.setItem('realWebhookListening', 'false');
-    
-    toast.info('🛑 Stopped listening for webhooks', {
-      duration: 2000
-    });
+    toast.info('🛑 Stopped listening for webhooks', { duration: 2000 });
 
     // Add a test log entry
     addWebhookLog({
@@ -255,7 +249,7 @@ function RealWebhookTesting() {
   const testWithCurl = () => {
     const companyId = getUserCompanyId();
     const curlCommand = `curl -X POST \\
-  https://relaxed-manatee-580f4b.netlify.app/api/webhook/incoming-call/${companyId} \\
+  https://relaxed-manatee-580f4b.netlify.app/.netlify/functions/webhook-incoming-call?company=${companyId} \\
   -H "Content-Type: application/json" \\
   -d '{
     "caller_id": "+306912345678",
@@ -305,16 +299,13 @@ function RealWebhookTesting() {
                 Live monitoring for actual webhook calls from your VoIP provider
               </p>
             </div>
-            
+
             {/* Status and Control */}
             <div className="flex items-center space-x-4">
-              <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
-                isListening ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-              }`}>
+              <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${isListening ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                 <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                 <span>{isListening ? 'Listening' : 'Stopped'}</span>
               </div>
-              
               <button
                 onClick={isListening ? stopListening : startListening}
                 className={`inline-flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -335,7 +326,6 @@ function RealWebhookTesting() {
               <SafeIcon icon={FiGlobe} className="h-5 w-5 text-blue-600" />
               <h4 className="text-sm font-medium text-blue-900">VoIP Provider Configuration</h4>
             </div>
-            
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-blue-700 mb-1">Webhook URL for VoIP Provider:</label>
@@ -351,7 +341,6 @@ function RealWebhookTesting() {
                   </button>
                 </div>
               </div>
-              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-blue-700">
                 <div>
                   <strong>📞 Test Number to Call:</strong>
@@ -381,7 +370,7 @@ function RealWebhookTesting() {
               <SafeIcon icon={FiPhone} className="w-5 h-5" />
               <span>Send Test Webhook</span>
             </button>
-            
+
             <button
               onClick={testWithCurl}
               className="inline-flex items-center justify-center space-x-2 px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
@@ -389,7 +378,7 @@ function RealWebhookTesting() {
               <SafeIcon icon={FiGlobe} className="w-5 h-5" />
               <span>Copy cURL Test</span>
             </button>
-            
+
             <button
               onClick={exportLogs}
               disabled={webhookLogs.length === 0}
@@ -398,7 +387,7 @@ function RealWebhookTesting() {
               <SafeIcon icon={FiDownload} className="w-5 h-5" />
               <span>Export Logs</span>
             </button>
-            
+
             <button
               onClick={clearLogs}
               disabled={webhookLogs.length === 0}
@@ -471,10 +460,7 @@ function RealWebhookTesting() {
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Last Received</dt>
                   <dd className="text-sm font-medium text-gray-900">
-                    {stats.lastReceived 
-                      ? format(new Date(stats.lastReceived), 'HH:mm:ss')
-                      : 'Never'
-                    }
+                    {stats.lastReceived ? format(new Date(stats.lastReceived), 'HH:mm:ss') : 'Never'}
                   </dd>
                 </dl>
               </div>
@@ -504,8 +490,8 @@ function RealWebhookTesting() {
               <SafeIcon icon={FiGlobe} className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No webhook activity yet</h3>
               <p className="mt-1 text-sm text-gray-500">
-                {isListening 
-                  ? 'Waiting for webhook calls from your VoIP provider...' 
+                {isListening
+                  ? 'Waiting for webhook calls from your VoIP provider...'
                   : 'Start listening to monitor webhook activity'
                 }
               </p>
@@ -529,7 +515,6 @@ function RealWebhookTesting() {
                       <div className={`rounded-full p-2 ${getTypeColor(log.type)}`}>
                         <SafeIcon icon={getTypeIcon(log.type)} className="h-4 w-4" />
                       </div>
-                      
                       <div className="flex-1">
                         <div className="flex items-center space-x-3 mb-2">
                           <h4 className="text-sm font-medium text-gray-900">
@@ -542,7 +527,6 @@ function RealWebhookTesting() {
                             {log.type || 'webhook'}
                           </span>
                         </div>
-                        
                         <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 mb-2">
                           <div>
                             <strong>Time:</strong> {format(new Date(log.timestamp), 'MMM d, yyyy HH:mm:ss')}
@@ -561,13 +545,11 @@ function RealWebhookTesting() {
                             </div>
                           )}
                         </div>
-
                         {log.error && (
                           <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
                             <strong>Error:</strong> {log.error}
                           </div>
                         )}
-
                         {log.response && (
                           <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
                             <strong>Response:</strong> {JSON.stringify(log.response, null, 2)}
@@ -575,7 +557,6 @@ function RealWebhookTesting() {
                         )}
                       </div>
                     </div>
-                    
                     <div className="text-right text-xs text-gray-500">
                       {format(new Date(log.timestamp), 'HH:mm:ss')}
                     </div>
@@ -602,7 +583,9 @@ function RealWebhookTesting() {
                 <li><strong>Verify Data:</strong> Check that the JSON payload matches your expectations</li>
               </ol>
               <div className="mt-3 p-2 bg-yellow-100 rounded">
-                <p className="text-xs"><strong>✅ Backend is now deployed!</strong> The webhook endpoint is live and ready to receive POST requests from your VoIP provider.</p>
+                <p className="text-xs">
+                  <strong>✅ Backend is now deployed!</strong> The webhook endpoint is live and ready to receive POST requests from your VoIP provider.
+                </p>
               </div>
             </div>
           </div>

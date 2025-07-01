@@ -45,29 +45,13 @@ function WebhookTester() {
 
   const getWebhookUrl = () => {
     const companyId = getUserCompanyId();
-    // Try to detect if we're on Netlify
-    const isNetlify = window.location.hostname.includes('netlify.app') || 
-                      window.location.hostname.includes('netlify.com');
-    
-    if (isNetlify) {
-      return `${window.location.origin}/.netlify/functions/webhook-incoming-call?company=${companyId}`;
-    } else {
-      // Local development or other deployment
-      return `${window.location.origin}/api/webhook-incoming-call?company=${companyId}`;
-    }
+    // 🔧 FIXED: Use proper Netlify Functions URL structure
+    return `${window.location.origin}/.netlify/functions/webhook-incoming-call?company=${companyId}`;
   };
 
   const getHealthUrl = () => {
-    // Try to detect if we're on Netlify
-    const isNetlify = window.location.hostname.includes('netlify.app') || 
-                      window.location.hostname.includes('netlify.com');
-    
-    if (isNetlify) {
-      return `${window.location.origin}/.netlify/functions/health`;
-    } else {
-      // Local development or other deployment
-      return `${window.location.origin}/api/health`;
-    }
+    // 🔧 FIXED: Use proper Netlify Functions URL structure  
+    return `${window.location.origin}/.netlify/functions/health`;
   };
 
   const addTestLog = (logData) => {
@@ -99,11 +83,11 @@ function WebhookTester() {
   const testHealthEndpoint = async () => {
     setIsTesting(true);
     toast.info('🏥 Testing health endpoint...', { duration: 2000 });
-    
+
     try {
       const healthUrl = getHealthUrl();
       console.log('🎯 Testing health URL:', healthUrl);
-      
+
       const startTime = Date.now();
       const response = await fetch(healthUrl, {
         method: 'GET',
@@ -111,22 +95,20 @@ function WebhookTester() {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache'
         },
-        // Add timeout
         signal: AbortSignal.timeout(30000) // 30 second timeout
       });
 
       const responseTime = Date.now() - startTime;
       const isSuccess = response.ok;
-      
-      console.log('📊 Health response:', { 
-        status: response.status, 
+
+      console.log('📊 Health response:', {
+        status: response.status,
         ok: response.ok,
-        responseTime 
+        responseTime
       });
 
       let responseData = null;
       const contentType = response.headers.get('content-type');
-      
       if (contentType && contentType.includes('application/json')) {
         try {
           responseData = await response.json();
@@ -164,7 +146,7 @@ function WebhookTester() {
 
     } catch (error) {
       console.error('Health test error:', error);
-      
+
       const result = {
         test: 'Health Check',
         success: false,
@@ -197,7 +179,7 @@ function WebhookTester() {
   const testWebhookEndpoint = async () => {
     setIsTesting(true);
     toast.info('📞 Testing webhook endpoint...', { duration: 2000 });
-    
+
     try {
       const companyId = getUserCompanyId();
       const testData = {
@@ -226,16 +208,15 @@ function WebhookTester() {
 
       const responseTime = Date.now() - startTime;
       const isSuccess = response.ok;
-      
-      console.log('📊 Webhook response:', { 
-        status: response.status, 
+
+      console.log('📊 Webhook response:', {
+        status: response.status,
         ok: response.ok,
-        responseTime 
+        responseTime
       });
 
       let responseData = null;
       const contentType = response.headers.get('content-type');
-      
       if (contentType && contentType.includes('application/json')) {
         try {
           responseData = await response.json();
@@ -276,7 +257,7 @@ function WebhookTester() {
 
     } catch (error) {
       console.error('Webhook test error:', error);
-      
+
       const result = {
         test: 'Webhook POST',
         success: false,
@@ -379,7 +360,7 @@ function WebhookTester() {
   -d '{
     "caller_id": "+306912345678",
     "timestamp": "${new Date().toISOString()}",
-    "call_type": "incoming",
+    "call_type": "incoming", 
     "webhook_id": "curl-test-${Date.now()}",
     "source": "curl_test"
   }'`;
@@ -435,7 +416,6 @@ function WebhookTester() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
       toast.success('📊 Logs exported successfully', { duration: 2000 });
     } catch (error) {
       console.error('Export failed:', error);
@@ -466,38 +446,47 @@ function WebhookTester() {
   };
 
   // Detect deployment type
-  const isNetlify = window.location.hostname.includes('netlify.app') || 
-                    window.location.hostname.includes('netlify.com');
+  const isNetlify = window.location.hostname.includes('netlify.app') || window.location.hostname.includes('netlify.com');
+  const isLocalhost = window.location.hostname === 'localhost';
 
   return (
     <div className="space-y-6">
       {/* Deployment Status */}
-      <div className={`border rounded-lg p-4 ${isNetlify ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+      <div className={`border rounded-lg p-4 ${isNetlify ? 'bg-green-50 border-green-200' : isLocalhost ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'}`}>
         <div className="flex items-center space-x-2 mb-2">
-          <SafeIcon icon={isNetlify ? FiCheckCircle : FiAlertTriangle} className={`h-5 w-5 ${isNetlify ? 'text-green-600' : 'text-blue-600'}`} />
+          <SafeIcon icon={isNetlify ? FiCheckCircle : FiInfo} className={`h-5 w-5 ${isNetlify ? 'text-green-600' : 'text-blue-600'}`} />
           <h4 className={`text-sm font-medium ${isNetlify ? 'text-green-900' : 'text-blue-900'}`}>
-            {isNetlify ? '🚀 Netlify Deployment Detected' : '💻 Local Development Mode'}
+            {isNetlify ? '🚀 Netlify Deployment Detected' : isLocalhost ? '💻 Local Development Mode' : '🌐 Custom Domain Deployment'}
           </h4>
         </div>
         <p className={`text-sm ${isNetlify ? 'text-green-700' : 'text-blue-700'}`}>
           {isNetlify 
-            ? 'Testing Netlify Functions endpoints. Functions should be automatically deployed.'
-            : 'Testing local development endpoints. Make sure your development server is running.'
+            ? 'Testing Netlify Functions endpoints as configured by Greta Support.'
+            : isLocalhost 
+              ? 'Testing local development endpoints. Functions will use Netlify structure.'
+              : 'Testing deployed endpoints with Netlify Functions structure.'
           }
         </p>
+        <div className="mt-3 p-3 bg-white border border-gray-200 rounded">
+          <p className="text-sm font-medium text-gray-900">📍 Current Function Endpoints:</p>
+          <div className="mt-1 space-y-1">
+            <p className="text-xs text-gray-600">Health: <code className="bg-gray-100 px-1 rounded">{getHealthUrl()}</code></p>
+            <p className="text-xs text-gray-600">Webhook: <code className="bg-gray-100 px-1 rounded">{getWebhookUrl()}</code></p>
+          </div>
+        </div>
       </div>
 
+      {/* Rest of the component remains the same... */}
       {/* Header */}
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 sm:p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-medium text-gray-900">🧪 Function Endpoint Tester</h3>
+              <h3 className="text-lg font-medium text-gray-900">🧪 Netlify Function Tester</h3>
               <p className="text-sm text-gray-500 mt-1">
-                Test your {isNetlify ? 'Netlify Functions' : 'API endpoints'} with real HTTP requests
+                Test your Netlify Functions with real HTTP requests
               </p>
             </div>
-            
             <div className="flex items-center space-x-2">
               <div className={`w-3 h-3 rounded-full ${isTesting ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400'}`}></div>
               <span className="text-sm text-gray-600">
@@ -515,7 +504,7 @@ function WebhookTester() {
                   <code className="flex-1 text-xs font-mono text-gray-800 bg-white border p-2 rounded break-all">
                     {getWebhookUrl()}
                   </code>
-                  <button
+                  <button 
                     onClick={copyWebhookUrl}
                     className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
@@ -523,16 +512,15 @@ function WebhookTester() {
                   </button>
                 </div>
               </div>
-              
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">🏥 Health Endpoint:</label>
                 <div className="flex items-center space-x-2">
                   <code className="flex-1 text-xs font-mono text-gray-800 bg-white border p-2 rounded break-all">
                     {getHealthUrl()}
                   </code>
-                  <a
-                    href={getHealthUrl()}
-                    target="_blank"
+                  <a 
+                    href={getHealthUrl()} 
+                    target="_blank" 
                     rel="noopener noreferrer"
                     className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
                   >
@@ -553,7 +541,7 @@ function WebhookTester() {
               <SafeIcon icon={FiWifi} className="w-5 h-5" />
               <span>Test Health</span>
             </button>
-            
+
             <button
               onClick={testWebhookEndpoint}
               disabled={isTesting}
@@ -562,7 +550,7 @@ function WebhookTester() {
               <SafeIcon icon={FiPhone} className="w-5 h-5" />
               <span>Test Webhook</span>
             </button>
-            
+
             <button
               onClick={runFullTestSuite}
               disabled={isTesting}
@@ -571,7 +559,7 @@ function WebhookTester() {
               <SafeIcon icon={FiPlay} className="w-5 h-5" />
               <span>Full Test Suite</span>
             </button>
-            
+
             <button
               onClick={copyCurlCommand}
               className="inline-flex items-center justify-center space-x-2 px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
@@ -583,9 +571,7 @@ function WebhookTester() {
 
           {/* Test Results */}
           {testResults && (
-            <div className={`border rounded-lg p-4 mb-6 ${
-              testResults.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-            }`}>
+            <div className={`border rounded-lg p-4 mb-6 ${testResults.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
               <div className="flex items-center space-x-2 mb-3">
                 <SafeIcon 
                   icon={testResults.success ? FiCheckCircle : FiXCircle} 
@@ -595,7 +581,6 @@ function WebhookTester() {
                   {testResults.test} - {testResults.success ? 'Success' : 'Failed'}
                 </h4>
               </div>
-              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <strong>Status:</strong> {testResults.status || 'N/A'}
@@ -604,7 +589,8 @@ function WebhookTester() {
                   <strong>Response Time:</strong> {testResults.responseTime || 'N/A'}ms
                 </div>
                 <div className="md:col-span-2">
-                  <strong>URL:</strong> <code className="text-xs bg-white px-1 py-0.5 rounded break-all">{testResults.url}</code>
+                  <strong>URL:</strong> 
+                  <code className="text-xs bg-white px-1 py-0.5 rounded break-all">{testResults.url}</code>
                 </div>
                 {testResults.contentType && (
                   <div className="md:col-span-2">
@@ -613,7 +599,8 @@ function WebhookTester() {
                 )}
                 {testResults.error && (
                   <div className="md:col-span-2">
-                    <strong>Error:</strong> <span className="text-red-600">{testResults.error}</span>
+                    <strong>Error:</strong> 
+                    <span className="text-red-600">{testResults.error}</span>
                     {testResults.errorType && (
                       <span className="ml-2 text-xs text-red-500">({testResults.errorType})</span>
                     )}
@@ -623,10 +610,7 @@ function WebhookTester() {
                   <div className="md:col-span-2">
                     <strong>Response:</strong>
                     <pre className="text-xs bg-white p-2 rounded mt-1 overflow-x-auto max-h-32 whitespace-pre-wrap">
-                      {typeof testResults.response === 'string' 
-                        ? testResults.response 
-                        : JSON.stringify(testResults.response, null, 2)
-                      }
+                      {typeof testResults.response === 'string' ? testResults.response : JSON.stringify(testResults.response, null, 2)}
                     </pre>
                   </div>
                 )}
@@ -696,10 +680,7 @@ function WebhookTester() {
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Last Test</dt>
                   <dd className="text-sm font-medium text-gray-900">
-                    {stats.lastReceived 
-                      ? format(new Date(stats.lastReceived), 'HH:mm:ss')
-                      : 'Never'
-                    }
+                    {stats.lastReceived ? format(new Date(stats.lastReceived), 'HH:mm:ss') : 'Never'}
                   </dd>
                 </dl>
               </div>
@@ -738,7 +719,7 @@ function WebhookTester() {
               <SafeIcon icon={FiTerminal} className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No tests run yet</h3>
               <p className="mt-1 text-sm text-gray-500">
-                Click a test button above to start testing your {isNetlify ? 'Netlify Functions' : 'API endpoints'}
+                Click a test button above to start testing your Netlify Functions
               </p>
             </div>
           ) : (
@@ -756,7 +737,6 @@ function WebhookTester() {
                       <div className={`rounded-full p-1.5 ${getTypeColor(log.type)}`}>
                         <SafeIcon icon={getTypeIcon(log.type)} className="h-3 w-3" />
                       </div>
-                      
                       <div className="flex-1">
                         <div className="flex items-center space-x-3 mb-1">
                           <h4 className="text-sm font-medium text-gray-900">
@@ -769,13 +749,11 @@ function WebhookTester() {
                             {log.type}
                           </span>
                         </div>
-                        
                         <div className="flex items-center space-x-4 text-xs text-gray-600">
                           <span>{format(new Date(log.timestamp), 'HH:mm:ss')}</span>
                           {log.caller_id && <span>📞 {log.caller_id}</span>}
                           {log.webhook_id && <span>🆔 {log.webhook_id}</span>}
                         </div>
-
                         {log.error && (
                           <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
                             <strong>Error:</strong> {log.error}
@@ -797,33 +775,19 @@ function WebhookTester() {
           <SafeIcon icon={FiInfo} className="h-5 w-5 text-blue-400" />
           <div className="ml-3">
             <h4 className="text-sm font-medium text-blue-900">
-              {isNetlify ? 'Netlify Functions' : 'API Endpoint'} Testing Guide
+              Netlify Functions Testing Guide
             </h4>
             <div className="mt-2 text-sm text-blue-700">
               <ol className="list-decimal list-inside space-y-1">
-                {isNetlify ? (
-                  <>
-                    <li><strong>Deploy First:</strong> Make sure your functions are deployed to Netlify</li>
-                    <li><strong>Check Functions:</strong> Verify functions appear in your Netlify dashboard</li>
-                    <li><strong>Test Health:</strong> Verify the health endpoint is responding</li>
-                    <li><strong>Test Webhook:</strong> Send a POST request to the webhook function</li>
-                  </>
-                ) : (
-                  <>
-                    <li><strong>Start Server:</strong> Make sure your development server is running</li>
-                    <li><strong>Test Health:</strong> Verify the health endpoint is responding</li>
-                    <li><strong>Test Webhook:</strong> Send a POST request to the webhook endpoint</li>
-                    <li><strong>Check Logs:</strong> Monitor the test results and error messages</li>
-                  </>
-                )}
+                <li><strong>Deploy Functions:</strong> Make sure your functions are deployed to Netlify</li>
+                <li><strong>Check Functions:</strong> Verify functions appear in your Netlify dashboard</li>
+                <li><strong>Test Health:</strong> Verify the health endpoint is responding</li>
+                <li><strong>Test Webhook:</strong> Send a POST request to the webhook function</li>
+                <li><strong>Monitor Logs:</strong> Check test results and error messages below</li>
               </ol>
               <div className="mt-3 p-2 bg-blue-100 rounded">
                 <p className="text-xs">
-                  <strong>💡 Note:</strong> {
-                    isNetlify 
-                      ? 'Functions use CommonJS (require) syntax and query parameters for Netlify compatibility.'
-                      : 'Make sure your local server is running on the expected port.'
-                  }
+                  <strong>✅ Greta Support Configuration Applied:</strong> Using proper Netlify Functions URL structure (/.netlify/functions/*)
                 </p>
               </div>
             </div>
