@@ -9,7 +9,7 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  
+
 # Function redirects
 [[redirects]]
   from = "/.netlify/functions/*"

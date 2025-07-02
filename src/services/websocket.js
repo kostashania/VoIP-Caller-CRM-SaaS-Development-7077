@@ -1,7 +1,7 @@
+// Legacy websocket service - keeping for compatibility
 import { useCallStore } from '../store/callStore';
 import { useCallerStore } from '../store/callerStore';
 import { useAuthStore } from '../store/authStore';
-import { callsAPI, callersAPI } from './supabaseAPI';
 
 class WebSocketService {
   constructor() {
@@ -13,11 +13,9 @@ class WebSocketService {
 
   connect() {
     try {
+      console.log('📡 WebSocket service initialized (demo mode)');
       // Mock WebSocket connection for demo
       // In production, replace with actual WebSocket URL
-      // this.ws = new WebSocket('ws://localhost:3001/ws');
-      
-      // Mock incoming calls for demo
       this.simulateIncomingCalls();
     } catch (error) {
       console.error('WebSocket connection failed:', error);
@@ -46,32 +44,14 @@ class WebSocketService {
 
   async handleIncomingCall(callData) {
     const { setIncomingCall, addCall } = useCallStore.getState();
-    const { getCallerByPhone } = useCallerStore.getState();
     const { getUserCompanyId } = useAuthStore.getState();
-
+    
     const companyId = getUserCompanyId();
     if (!companyId) return;
 
     try {
-      // Check if caller exists in the database
-      const caller = await callersAPI.getByPhone(companyId, callData.caller_number);
-
-      // Create call record in database
-      const newCall = await callsAPI.create({
-        company_id: companyId,
-        caller_id: caller?.id || null,
-        caller_number: callData.caller_number,
-        call_status: 'incoming',
-        timestamp: callData.timestamp,
-        voip_raw_payload: callData
-      });
-
-      // Add caller info to call object
-      newCall.caller = caller;
-
-      // Update local state
-      addCall(newCall);
-      setIncomingCall(newCall);
+      console.log('📞 Demo incoming call:', callData);
+      // For demo purposes, we'll use the webhook service instead
     } catch (error) {
       console.error('Failed to handle incoming call:', error);
     }

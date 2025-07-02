@@ -28,16 +28,16 @@ function App() {
         <Toaster
           position="top-right"
           toastOptions={{
-            duration: 2000, // Shorter duration - 2 seconds instead of 4
+            duration: 2000,
             style: {
               background: '#363636',
               color: '#fff',
             },
             success: {
-              duration: 1500, // Even shorter for success messages
+              duration: 1500,
             },
             error: {
-              duration: 3000, // Longer for errors so users can read them
+              duration: 3000,
             }
           }}
         />
@@ -89,6 +89,7 @@ function App() {
 
           {/* Default Route */}
           <Route path="/" element={<Navigate to="/dashboard" />} />
+          <Route path="*" element={<Navigate to="/dashboard" />} />
         </Routes>
       </div>
     </Router>

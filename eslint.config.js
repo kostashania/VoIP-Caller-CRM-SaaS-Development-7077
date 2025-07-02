@@ -7,9 +7,10 @@ export default [
   {
     ignores: [
       'dist',
-      'server/**/*', // Ignore server files from linting
+      'server/**/*',
       'node_modules',
-      '*.config.js'
+      '*.config.js',
+      'netlify/functions/**/*'
     ]
   },
   js.configs.recommended,
@@ -33,7 +34,8 @@ export default [
         URL: true,
         fetch: true,
         btoa: true,
-        atob: true
+        atob: true,
+        process: true
       },
       parserOptions: {
         ecmaFeatures: {

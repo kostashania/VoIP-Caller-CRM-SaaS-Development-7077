@@ -1,6 +1,7 @@
-// This file is no longer needed as we're using mock data
+// Demo data setup - simplified for build compatibility
 export const setupDemoData = async () => {
-  // Mock function - data is now handled in supabaseAPI.js
-  console.log('Using mock demo data');
+  console.log('Using mock demo data for development');
   return true;
 };
+
+export default setupDemoData;

@@ -12,7 +12,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false, // Disable sourcemaps for production
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -21,7 +21,10 @@ export default defineConfig({
           icons: ['react-icons']
         }
       }
-    }
+    },
+    // Ensure all dependencies are properly externalized for SSR
+    ssr: false,
+    target: 'es2015'
   },
   server: {
     port: 5173,
@@ -30,5 +33,20 @@ export default defineConfig({
   preview: {
     port: 4173,
     host: true
+  },
+  // Optimize dependencies
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'react-icons',
+      'framer-motion',
+      'react-hot-toast',
+      'react-hook-form',
+      'zustand',
+      'date-fns',
+      '@supabase/supabase-js'
+    ]
   }
 });

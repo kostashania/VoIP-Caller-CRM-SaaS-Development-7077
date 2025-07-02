@@ -1,35 +1,35 @@
-import React,{useState,useEffect} from 'react';
-import {motion} from 'framer-motion';
-import {format} from 'date-fns';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { format } from 'date-fns';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../../common/SafeIcon';
-import {useAuthStore} from '../../store/authStore';
+import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
 
-const {FiPhone,FiPlay,FiStop,FiRefreshCw,FiDownload,FiTrash2,FiClock,FiCheckCircle,FiXCircle,FiGlobe,FiInfo,FiWifi,FiCopy,FiSend,FiTerminal,FiExternalLink,FiAlertTriangle}=FiIcons;
+const { FiPhone, FiPlay, FiStop, FiRefreshCw, FiDownload, FiTrash2, FiClock, FiCheckCircle, FiXCircle, FiGlobe, FiInfo, FiWifi, FiCopy, FiSend, FiTerminal, FiExternalLink, FiAlertTriangle } = FiIcons;
 
 function WebhookTester() {
-  const [webhookLogs,setWebhookLogs]=useState([]);
-  const [isTesting,setIsTesting]=useState(false);
-  const [testResults,setTestResults]=useState(null);
-  const [stats,setStats]=useState({
+  const [webhookLogs, setWebhookLogs] = useState([]);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResults, setTestResults] = useState(null);
+  const [stats, setStats] = useState({
     totalReceived: 0,
     lastReceived: null,
     successCount: 0,
     errorCount: 0
   });
-  const {getUserCompanyId}=useAuthStore();
+  const { getUserCompanyId } = useAuthStore();
 
   // Load saved data from localStorage
-  useEffect(()=> {
-    const savedLogs=localStorage.getItem('webhookTestLogs');
-    const savedStats=localStorage.getItem('webhookTestStats');
+  useEffect(() => {
+    const savedLogs = localStorage.getItem('webhookTestLogs');
+    const savedStats = localStorage.getItem('webhookTestStats');
 
     if (savedLogs) {
       try {
         setWebhookLogs(JSON.parse(savedLogs));
       } catch (error) {
-        console.error('Failed to parse saved logs:',error);
+        console.error('Failed to parse saved logs:', error);
       }
     }
 
@@ -37,52 +37,52 @@ function WebhookTester() {
       try {
         setStats(JSON.parse(savedStats));
       } catch (error) {
-        console.error('Failed to parse saved stats:',error);
+        console.error('Failed to parse saved stats:', error);
       }
     }
-  },[]);
+  }, []);
 
-  const getWebhookUrl=()=> {
-    const companyId=getUserCompanyId();
+  const getWebhookUrl = () => {
+    const companyId = getUserCompanyId();
     return `https://relaxed-manatee-580f4b.netlify.app/.netlify/functions/webhook-incoming-call?company=${companyId}`;
   };
 
-  const getHealthUrl=()=> {
+  const getHealthUrl = () => {
     return `https://relaxed-manatee-580f4b.netlify.app/.netlify/functions/health`;
   };
 
-  const addTestLog=(logData)=> {
-    const newLog={
+  const addTestLog = (logData) => {
+    const newLog = {
       id: Date.now() + Math.random(),
       ...logData,
       timestamp: new Date().toISOString()
     };
 
-    setWebhookLogs(prev=> {
-      const updated=[newLog,...prev].slice(0,50);
-      localStorage.setItem('webhookTestLogs',JSON.stringify(updated));
+    setWebhookLogs(prev => {
+      const updated = [newLog, ...prev].slice(0, 50);
+      localStorage.setItem('webhookTestLogs', JSON.stringify(updated));
       return updated;
     });
 
-    setStats(prev=> {
-      const updated={
+    setStats(prev => {
+      const updated = {
         totalReceived: prev.totalReceived + 1,
         lastReceived: newLog.timestamp,
         successCount: prev.successCount + (logData.success ? 1 : 0),
         errorCount: prev.errorCount + (logData.success ? 0 : 1)
       };
-      localStorage.setItem('webhookTestStats',JSON.stringify(updated));
+      localStorage.setItem('webhookTestStats', JSON.stringify(updated));
       return updated;
     });
   };
 
   // Enhanced fetch with better timeout handling
-  const fetchWithTimeout=async (url,options={},timeoutMs=15000)=> {
-    const controller=new AbortController();
-    const id=setTimeout(()=> controller.abort(),timeoutMs);
+  const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response=await fetch(url,{
+      const response = await fetch(url, {
         ...options,
         signal: controller.signal
       });
@@ -90,54 +90,55 @@ function WebhookTester() {
       return response;
     } catch (error) {
       clearTimeout(id);
-      if (error.name==='AbortError') {
-        throw new Error(`Request timed out after ${timeoutMs/1000} seconds`);
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timed out after ${timeoutMs / 1000} seconds`);
       }
       throw error;
     }
   };
 
   // Test 1: Check Health Endpoint
-  const testHealthEndpoint=async ()=> {
+  const testHealthEndpoint = async () => {
     setIsTesting(true);
-    toast.info('🏥 Testing health endpoint...',{duration: 2000});
+    toast.info('🏥 Testing health endpoint...', { duration: 2000 });
 
     try {
-      const healthUrl=getHealthUrl();
-      console.log('🎯 Testing health URL:',healthUrl);
+      const healthUrl = getHealthUrl();
+      console.log('🎯 Testing health URL:', healthUrl);
 
-      const startTime=Date.now();
-      const response=await fetchWithTimeout(healthUrl,{
+      const startTime = Date.now();
+      const response = await fetchWithTimeout(healthUrl, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache'
         }
-      },15000); // 15 second timeout
+      }, 15000);
+      
+      const responseTime = Date.now() - startTime;
+      const isSuccess = response.ok;
 
-      const responseTime=Date.now() - startTime;
-      const isSuccess=response.ok;
-
-      console.log('📊 Health response:',{
+      console.log('📊 Health response:', {
         status: response.status,
         ok: response.ok,
         responseTime
       });
 
-      let responseData=null;
-      const contentType=response.headers.get('content-type');
+      let responseData = null;
+      const contentType = response.headers.get('content-type');
+      
       try {
         if (contentType && contentType.includes('application/json')) {
-          responseData=await response.json();
+          responseData = await response.json();
         } else {
-          responseData=await response.text();
+          responseData = await response.text();
         }
       } catch (parseError) {
-        console.warn('Could not parse response:',parseError);
-        responseData='Could not parse response';
+        console.warn('Could not parse response:', parseError);
+        responseData = 'Could not parse response';
       }
 
-      const result={
+      const result = {
         test: 'Health Check',
         success: isSuccess,
         status: response.status,
@@ -156,14 +157,14 @@ function WebhookTester() {
       });
 
       if (isSuccess) {
-        toast.success(`✅ Health check passed (${responseTime}ms)`,{duration: 3000});
+        toast.success(`✅ Health check passed (${responseTime}ms)`, { duration: 3000 });
       } else {
-        toast.error(`❌ Health check failed: ${response.status} ${response.statusText}`,{duration: 4000});
+        toast.error(`❌ Health check failed: ${response.status} ${response.statusText}`, { duration: 4000 });
       }
     } catch (error) {
-      console.error('Health test error:',error);
-
-      const result={
+      console.error('Health test error:', error);
+      
+      const result = {
         test: 'Health Check',
         success: false,
         error: error.message,
@@ -180,11 +181,11 @@ function WebhookTester() {
       });
 
       if (error.message.includes('timed out')) {
-        toast.error(`❌ Health check timed out`,{duration: 4000});
-      } else if (error.message.includes('Failed to fetch') || error.name==='TypeError') {
-        toast.error(`❌ Network error: Functions not deployed or inaccessible`,{duration: 4000});
+        toast.error('❌ Health check timed out', { duration: 4000 });
+      } else if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+        toast.error('❌ Network error: Functions not deployed or inaccessible', { duration: 4000 });
       } else {
-        toast.error(`❌ Health check failed: ${error.message}`,{duration: 4000});
+        toast.error(`❌ Health check failed: ${error.message}`, { duration: 4000 });
       }
     } finally {
       setIsTesting(false);
@@ -192,12 +193,12 @@ function WebhookTester() {
   };
 
   // Test 2: Send Test Webhook
-  const testWebhookEndpoint=async ()=> {
+  const testWebhookEndpoint = async () => {
     setIsTesting(true);
-    toast.info('📞 Testing webhook endpoint...',{duration: 2000});
+    toast.info('📞 Testing webhook endpoint...', { duration: 2000 });
 
     try {
-      const testData={
+      const testData = {
         caller_id: '+306912345678',
         timestamp: new Date().toISOString(),
         call_type: 'incoming',
@@ -205,12 +206,12 @@ function WebhookTester() {
         source: 'ui_test'
       };
 
-      const webhookUrl=getWebhookUrl();
-      console.log('🎯 Testing webhook URL:',webhookUrl);
-      console.log('📞 Test data:',testData);
+      const webhookUrl = getWebhookUrl();
+      console.log('🎯 Testing webhook URL:', webhookUrl);
+      console.log('📞 Test data:', testData);
 
-      const startTime=Date.now();
-      const response=await fetchWithTimeout(webhookUrl,{
+      const startTime = Date.now();
+      const response = await fetchWithTimeout(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -218,31 +219,32 @@ function WebhookTester() {
           'Cache-Control': 'no-cache'
         },
         body: JSON.stringify(testData)
-      },15000); // 15 second timeout
+      }, 15000);
+      
+      const responseTime = Date.now() - startTime;
+      const isSuccess = response.ok;
 
-      const responseTime=Date.now() - startTime;
-      const isSuccess=response.ok;
-
-      console.log('📊 Webhook response:',{
+      console.log('📊 Webhook response:', {
         status: response.status,
         ok: response.ok,
         responseTime
       });
 
-      let responseData=null;
-      const contentType=response.headers.get('content-type');
+      let responseData = null;
+      const contentType = response.headers.get('content-type');
+      
       try {
         if (contentType && contentType.includes('application/json')) {
-          responseData=await response.json();
+          responseData = await response.json();
         } else {
-          responseData=await response.text();
+          responseData = await response.text();
         }
       } catch (parseError) {
-        console.warn('Could not parse response:',parseError);
-        responseData='Could not parse response';
+        console.warn('Could not parse response:', parseError);
+        responseData = 'Could not parse response';
       }
 
-      const result={
+      const result = {
         test: 'Webhook POST',
         success: isSuccess,
         status: response.status,
@@ -264,14 +266,14 @@ function WebhookTester() {
       });
 
       if (isSuccess) {
-        toast.success(`✅ Webhook test passed (${responseTime}ms)`,{duration: 3000});
+        toast.success(`✅ Webhook test passed (${responseTime}ms)`, { duration: 3000 });
       } else {
-        toast.error(`❌ Webhook test failed: ${response.status} ${response.statusText}`,{duration: 4000});
+        toast.error(`❌ Webhook test failed: ${response.status} ${response.statusText}`, { duration: 4000 });
       }
     } catch (error) {
-      console.error('Webhook test error:',error);
-
-      const result={
+      console.error('Webhook test error:', error);
+      
+      const result = {
         test: 'Webhook POST',
         success: false,
         error: error.message,
@@ -288,11 +290,11 @@ function WebhookTester() {
       });
 
       if (error.message.includes('timed out')) {
-        toast.error(`❌ Webhook test timed out`,{duration: 4000});
-      } else if (error.message.includes('Failed to fetch') || error.name==='TypeError') {
-        toast.error(`❌ Network error: Functions not deployed or inaccessible`,{duration: 4000});
+        toast.error('❌ Webhook test timed out', { duration: 4000 });
+      } else if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+        toast.error('❌ Network error: Functions not deployed or inaccessible', { duration: 4000 });
       } else {
-        toast.error(`❌ Webhook test failed: ${error.message}`,{duration: 4000});
+        toast.error(`❌ Webhook test failed: ${error.message}`, { duration: 4000 });
       }
     } finally {
       setIsTesting(false);
@@ -300,22 +302,22 @@ function WebhookTester() {
   };
 
   // Test 3: Run Full Test Suite
-  const runFullTestSuite=async ()=> {
+  const runFullTestSuite = async () => {
     setIsTesting(true);
-    toast.info('🧪 Running full test suite...',{duration: 2000});
+    toast.info('🧪 Running full test suite...', { duration: 2000 });
 
     // Test 1: Health Check
     await testHealthEndpoint();
-    await new Promise(resolve=> setTimeout(resolve,1000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Test 2: Webhook POST
     await testWebhookEndpoint();
-    await new Promise(resolve=> setTimeout(resolve,1000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Test 3: Multiple webhooks
-    for (let i=1;i <=3;i++) {
+    for (let i = 1; i <= 3; i++) {
       try {
-        const testData={
+        const testData = {
           caller_id: `+155500000${i}`,
           timestamp: new Date().toISOString(),
           call_type: 'incoming',
@@ -323,13 +325,13 @@ function WebhookTester() {
           source: 'batch_test'
         };
 
-        const response=await fetchWithTimeout(getWebhookUrl(),{
+        const response = await fetchWithTimeout(getWebhookUrl(), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(testData)
-        },10000); // 10 second timeout for batch
+        }, 10000);
 
         addTestLog({
           type: 'batch',
@@ -339,7 +341,7 @@ function WebhookTester() {
           webhook_id: testData.webhook_id
         });
 
-        await new Promise(resolve=> setTimeout(resolve,500));
+        await new Promise(resolve => setTimeout(resolve, 500));
       } catch (error) {
         addTestLog({
           type: 'batch',
@@ -351,34 +353,40 @@ function WebhookTester() {
     }
 
     setIsTesting(false);
-    toast.success('🎉 Test suite completed! Check logs below.',{duration: 3000});
+    toast.success('🎉 Test suite completed! Check logs below.', { duration: 3000 });
   };
 
-  const copyWebhookUrl=async ()=> {
+  const copyWebhookUrl = async () => {
     try {
       await navigator.clipboard.writeText(getWebhookUrl());
-      toast.success('📋 Webhook URL copied to clipboard!',{duration: 2000});
+      toast.success('📋 Webhook URL copied to clipboard!', { duration: 2000 });
     } catch (error) {
-      toast.error('Failed to copy URL',{duration: 2000});
+      toast.error('Failed to copy URL', { duration: 2000 });
     }
   };
 
-  const copyCurlCommand=async ()=> {
-    const curlCommand=`curl -X POST \\
+  const copyCurlCommand = async () => {
+    const curlCommand = `curl -X POST \\
   "${getWebhookUrl()}" \\
   -H "Content-Type: application/json" \\
   -H "Accept: application/json" \\
-  -d '{"caller_id": "+306912345678","timestamp": "${new Date().toISOString()}","call_type": "incoming","webhook_id": "curl-test-${Date.now()}","source": "curl_test"}'`;
+  -d '{
+    "caller_id": "+306912345678",
+    "timestamp": "${new Date().toISOString()}",
+    "call_type": "incoming",
+    "webhook_id": "curl-test-${Date.now()}",
+    "source": "curl_test"
+  }'`;
 
     try {
       await navigator.clipboard.writeText(curlCommand);
-      toast.success('📋 cURL command copied to clipboard!',{duration: 2000});
+      toast.success('📋 cURL command copied to clipboard!', { duration: 2000 });
     } catch (error) {
-      toast.error('Failed to copy cURL command',{duration: 2000});
+      toast.error('Failed to copy cURL command', { duration: 2000 });
     }
   };
 
-  const clearLogs=()=> {
+  const clearLogs = () => {
     if (confirm('Clear all test logs?')) {
       setWebhookLogs([]);
       setStats({
@@ -390,14 +398,14 @@ function WebhookTester() {
       setTestResults(null);
       localStorage.removeItem('webhookTestLogs');
       localStorage.removeItem('webhookTestStats');
-      toast.success('🗑️ Logs cleared',{duration: 1500});
+      toast.success('🗑️ Logs cleared', { duration: 1500 });
     }
   };
 
-  const exportLogs=()=> {
+  const exportLogs = () => {
     try {
-      const csvHeaders=['Timestamp','Type','Message','Status','Caller ID','Webhook ID','Error'];
-      const csvData=webhookLogs.map(log=> [
+      const csvHeaders = ['Timestamp', 'Type', 'Message', 'Status', 'Caller ID', 'Webhook ID', 'Error'];
+      const csvData = webhookLogs.map(log => [
         new Date(log.timestamp).toLocaleString(),
         log.type || 'test',
         log.message || 'Test executed',
@@ -407,33 +415,33 @@ function WebhookTester() {
         log.error || '-'
       ]);
 
-      const csvContent=[
+      const csvContent = [
         csvHeaders.join(','),
-        ...csvData.map(row=> row.map(cell=> `"${String(cell).replace(/"/g,'""')}"`).join(','))
+        ...csvData.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       ].join('\n');
 
-      const blob=new Blob([csvContent],{type: 'text/csv;charset=utf-8;'});
-      const link=document.createElement('a');
-      const url=URL.createObjectURL(blob);
-      link.setAttribute('href',url);
-      link.setAttribute('download',`webhook_test_logs_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility='hidden';
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `webhook_test_logs_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      toast.success('📊 Logs exported successfully',{duration: 2000});
+      toast.success('📊 Logs exported successfully', { duration: 2000 });
     } catch (error) {
-      console.error('Export failed:',error);
-      toast.error('Failed to export logs',{duration: 2000});
+      console.error('Export failed:', error);
+      toast.error('Failed to export logs', { duration: 2000 });
     }
   };
 
-  const getStatusColor=(success)=> {
+  const getStatusColor = (success) => {
     return success ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100';
   };
 
-  const getTypeIcon=(type)=> {
+  const getTypeIcon = (type) => {
     switch (type) {
       case 'health': return FiWifi;
       case 'webhook': return FiPhone;
@@ -442,7 +450,7 @@ function WebhookTester() {
     }
   };
 
-  const getTypeColor=(type)=> {
+  const getTypeColor = (type) => {
     switch (type) {
       case 'health': return 'text-blue-600 bg-blue-100';
       case 'webhook': return 'text-green-600 bg-green-100';
@@ -452,37 +460,25 @@ function WebhookTester() {
   };
 
   // Detect deployment type
-  const isNetlify=window.location.hostname.includes('netlify.app') || window.location.hostname.includes('netlify.com');
-  const isLocalhost=window.location.hostname==='localhost';
+  const isNetlify = window.location.hostname.includes('netlify.app') || window.location.hostname.includes('netlify.com');
+  const isLocalhost = window.location.hostname === 'localhost';
 
   return (
     <div className="space-y-6">
       {/* Deployment Status */}
-      <div className={`border rounded-lg p-4 ${
-        isNetlify 
-          ? 'bg-green-50 border-green-200' 
-          : isLocalhost 
-            ? 'bg-blue-50 border-blue-200' 
-            : 'bg-yellow-50 border-yellow-200'
-      }`}>
+      <div className={`border rounded-lg p-4 ${isNetlify ? 'bg-green-50 border-green-200' : isLocalhost ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'}`}>
         <div className="flex items-center space-x-2 mb-2">
           <SafeIcon icon={isNetlify ? FiCheckCircle : FiInfo} className={`h-5 w-5 ${isNetlify ? 'text-green-600' : 'text-blue-600'}`} />
           <h4 className={`text-sm font-medium ${isNetlify ? 'text-green-900' : 'text-blue-900'}`}>
-            {isNetlify 
-              ? '🚀 Netlify Production Deployment' 
-              : isLocalhost 
-                ? '💻 Local Development Mode'
-                : '🌐 Custom Domain Deployment'
-            }
+            {isNetlify ? '🚀 Netlify Production Deployment' : isLocalhost ? '💻 Local Development Mode' : '🌐 Custom Domain Deployment'}
           </h4>
         </div>
         <p className={`text-sm ${isNetlify ? 'text-green-700' : 'text-blue-700'}`}>
           {isNetlify 
             ? 'Testing production Netlify Functions endpoints - ready for real VoIP integration!' 
             : isLocalhost 
-              ? 'Testing local development endpoints. Functions will use Netlify structure.'
-              : 'Testing deployed endpoints with Netlify Functions structure.'
-          }
+              ? 'Testing local development endpoints. Functions will use Netlify structure.' 
+              : 'Testing deployed endpoints with Netlify Functions structure.'}
         </p>
         <div className="mt-3 p-3 bg-white border border-gray-200 rounded">
           <p className="text-sm font-medium text-gray-900">📍 Current Function Endpoints:</p>
@@ -587,18 +583,13 @@ function WebhookTester() {
 
           {/* Test Results */}
           {testResults && (
-            <div className={`border rounded-lg p-4 mb-6 ${
-              testResults.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-            }`}>
+            <div className={`border rounded-lg p-4 mb-6 ${testResults.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
               <div className="flex items-center space-x-2 mb-3">
-                <SafeIcon icon={testResults.success ? FiCheckCircle : FiXCircle} className={`w-5 h-5 ${
-                  testResults.success ? 'text-green-600' : 'text-red-600'
-                }`} />
+                <SafeIcon icon={testResults.success ? FiCheckCircle : FiXCircle} className={`w-5 h-5 ${testResults.success ? 'text-green-600' : 'text-red-600'}`} />
                 <h4 className={`font-medium ${testResults.success ? 'text-green-900' : 'text-red-900'}`}>
                   {testResults.test} - {testResults.success ? 'Success' : 'Failed'}
                 </h4>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <strong>Status:</strong> {testResults.status || 'N/A'}
@@ -607,7 +598,8 @@ function WebhookTester() {
                   <strong>Response Time:</strong> {testResults.responseTime || 'N/A'}ms
                 </div>
                 <div className="md:col-span-2">
-                  <strong>URL:</strong> <code className="text-xs bg-white px-1 py-0.5 rounded break-all">{testResults.url}</code>
+                  <strong>URL:</strong>
+                  <code className="text-xs bg-white px-1 py-0.5 rounded break-all ml-1">{testResults.url}</code>
                 </div>
                 {testResults.contentType && (
                   <div className="md:col-span-2">
@@ -626,7 +618,7 @@ function WebhookTester() {
                   <div className="md:col-span-2">
                     <strong>Response:</strong>
                     <pre className="text-xs bg-white p-2 rounded mt-1 overflow-x-auto max-h-32 whitespace-pre-wrap">
-                      {typeof testResults.response==='string' ? testResults.response : JSON.stringify(testResults.response,null,2)}
+                      {typeof testResults.response === 'string' ? testResults.response : JSON.stringify(testResults.response, null, 2)}
                     </pre>
                   </div>
                 )}
@@ -696,7 +688,7 @@ function WebhookTester() {
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Last Test</dt>
                   <dd className="text-sm font-medium text-gray-900">
-                    {stats.lastReceived ? format(new Date(stats.lastReceived),'HH:mm:ss') : 'Never'}
+                    {stats.lastReceived ? format(new Date(stats.lastReceived), 'HH:mm:ss') : 'Never'}
                   </dd>
                 </dl>
               </div>
@@ -713,7 +705,7 @@ function WebhookTester() {
             <div className="flex items-center space-x-2">
               <button
                 onClick={exportLogs}
-                disabled={webhookLogs.length===0}
+                disabled={webhookLogs.length === 0}
                 className="inline-flex items-center space-x-1 px-3 py-1 text-sm bg-green-100 text-green-700 rounded-md hover:bg-green-200 disabled:opacity-50"
               >
                 <SafeIcon icon={FiDownload} className="w-4 h-4" />
@@ -721,7 +713,7 @@ function WebhookTester() {
               </button>
               <button
                 onClick={clearLogs}
-                disabled={webhookLogs.length===0}
+                disabled={webhookLogs.length === 0}
                 className="inline-flex items-center space-x-1 px-3 py-1 text-sm bg-red-100 text-red-700 rounded-md hover:bg-red-200 disabled:opacity-50"
               >
                 <SafeIcon icon={FiTrash2} className="w-4 h-4" />
@@ -730,7 +722,7 @@ function WebhookTester() {
             </div>
           </div>
 
-          {webhookLogs.length===0 ? (
+          {webhookLogs.length === 0 ? (
             <div className="text-center py-12">
               <SafeIcon icon={FiTerminal} className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No tests run yet</h3>
@@ -740,12 +732,12 @@ function WebhookTester() {
             </div>
           ) : (
             <div className="space-y-3">
-              {webhookLogs.map((log,index)=> (
+              {webhookLogs.map((log, index) => (
                 <motion.div
                   key={log.id}
-                  initial={{opacity: 0,y: 10}}
-                  animate={{opacity: 1,y: 0}}
-                  transition={{delay: index * 0.02}}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.02 }}
                   className="border border-gray-200 rounded-lg p-3 hover:border-gray-300 transition-colors"
                 >
                   <div className="flex items-start justify-between">
@@ -766,7 +758,7 @@ function WebhookTester() {
                           </span>
                         </div>
                         <div className="flex items-center space-x-4 text-xs text-gray-600">
-                          <span>{format(new Date(log.timestamp),'HH:mm:ss')}</span>
+                          <span>{format(new Date(log.timestamp), 'HH:mm:ss')}</span>
                           {log.caller_id && <span>📞 {log.caller_id}</span>}
                           {log.webhook_id && <span>🆔 {log.webhook_id}</span>}
                         </div>
