@@ -11,6 +11,7 @@ const { FiPhone, FiPlay, FiStop, FiRefreshCw, FiDownload, FiTrash2, FiClock, FiC
 function RealWebhookTesting() {
   const [isListening, setIsListening] = useState(false);
   const [webhookLogs, setWebhookLogs] = useState([]);
+  const [isTesting, setIsTesting] = useState(false);
   const [stats, setStats] = useState({
     totalReceived: 0,
     lastReceived: null,
@@ -73,7 +74,6 @@ function RealWebhookTesting() {
 
   const getWebhookUrl = () => {
     const companyId = getUserCompanyId();
-    // 🔧 FIXED: Use the correct Netlify Functions URL
     return `${window.location.origin}/.netlify/functions/webhook-incoming-call?company=${companyId}`;
   };
 
@@ -81,7 +81,6 @@ function RealWebhookTesting() {
     setIsListening(true);
     localStorage.setItem('realWebhookListening', 'true');
     
-    // 🔧 FIXED: Use proper toast import
     toast.success('🎧 Now listening for real webhooks from VoIP provider!', { duration: 4000 });
 
     // Add a test log entry to show the system is active
@@ -102,7 +101,6 @@ function RealWebhookTesting() {
     setIsListening(false);
     localStorage.setItem('realWebhookListening', 'false');
     
-    // 🔧 FIXED: Use proper toast import
     toast.info('🛑 Stopped listening for webhooks', { duration: 2000 });
 
     // Add a test log entry
@@ -155,7 +153,6 @@ function RealWebhookTesting() {
       localStorage.removeItem('realWebhookLogs');
       localStorage.removeItem('realWebhookStats');
       
-      // 🔧 FIXED: Use proper toast import
       toast.success('All webhook logs cleared', { duration: 2000 });
     }
   };
@@ -188,7 +185,6 @@ function RealWebhookTesting() {
       link.click();
       document.body.removeChild(link);
       
-      // 🔧 FIXED: Use proper toast import
       toast.success('Real webhook logs exported successfully', { duration: 2000 });
     } catch (error) {
       console.error('Export failed:', error);
@@ -197,27 +193,54 @@ function RealWebhookTesting() {
   };
 
   const testWebhookEndpoint = async () => {
+    setIsTesting(true);
+    
     try {
       const testData = {
         caller_id: '+306912345678',
         timestamp: new Date().toISOString(),
         call_type: 'incoming',
-        webhook_id: 'test-' + Date.now()
+        webhook_id: 'test-' + Date.now(),
+        source: 'manual_test'
       };
 
-      // 🔧 FIXED: Use proper toast import
+      console.log('🧪 Testing webhook with data:', testData);
       toast.info('Testing webhook endpoint...', { duration: 2000 });
+
+      // Create timeout controller
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.log('⏰ Webhook test timed out');
+      }, 15000); // 15 second timeout
 
       const response = await fetch(getWebhookUrl(), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
-        body: JSON.stringify(testData)
+        body: JSON.stringify(testData),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
+
+      console.log('📊 Webhook response:', {
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText
+      });
+
+      let responseData = null;
+      try {
+        responseData = await response.json();
+      } catch (jsonError) {
+        console.warn('Could not parse JSON response:', jsonError);
+        responseData = await response.text();
+      }
+
       if (response.ok) {
-        const result = await response.json();
         addWebhookLog({
           type: 'test',
           message: 'Test webhook sent successfully',
@@ -225,33 +248,43 @@ function RealWebhookTesting() {
           source: 'manual_test',
           caller_id: testData.caller_id,
           webhook_id: testData.webhook_id,
-          response: result
+          response: responseData
         });
         
-        // 🔧 FIXED: Use proper toast import
         toast.success('✅ Test webhook sent successfully!', { duration: 3000 });
+        console.log('✅ Test webhook succeeded:', responseData);
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
-      console.error('Test webhook failed:', error);
+      console.error('❌ Test webhook failed:', error);
+      
+      let errorMessage = 'Unknown error';
+      if (error.name === 'AbortError') {
+        errorMessage = 'Request timed out (15s)';
+      } else if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        errorMessage = 'Network error - Functions may not be deployed';
+      } else {
+        errorMessage = error.message || 'Request failed';
+      }
+
       addWebhookLog({
         type: 'test',
-        message: `Test webhook failed: ${error.message}`,
+        message: `Test webhook failed: ${errorMessage}`,
         success: false,
         source: 'manual_test',
-        error: error.message
+        error: errorMessage
       });
       
-      // 🔧 FIXED: Use proper toast import
-      toast.error(`❌ Test webhook failed: ${error.message}`, { duration: 4000 });
+      toast.error(`❌ Test webhook failed: ${errorMessage}`, { duration: 4000 });
+    } finally {
+      setIsTesting(false);
     }
   };
 
   const copyWebhookUrl = async () => {
     try {
       await navigator.clipboard.writeText(getWebhookUrl());
-      // 🔧 FIXED: Use proper toast import
       toast.success('Webhook URL copied to clipboard!', { duration: 2000 });
     } catch (error) {
       console.error('Failed to copy URL:', error);
@@ -260,7 +293,6 @@ function RealWebhookTesting() {
   };
 
   const testWithCurl = () => {
-    const companyId = getUserCompanyId();
     const curlCommand = `curl -X POST \\
   ${getWebhookUrl()} \\
   -H "Content-Type: application/json" \\
@@ -272,7 +304,6 @@ function RealWebhookTesting() {
   }'`;
 
     navigator.clipboard.writeText(curlCommand).then(() => {
-      // 🔧 FIXED: Use proper toast import
       toast.success('cURL command copied to clipboard!', { duration: 3000 });
     }).catch(() => {
       toast.error('Failed to copy cURL command', { duration: 2000 });
@@ -379,10 +410,11 @@ function RealWebhookTesting() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <button
               onClick={testWebhookEndpoint}
-              className="inline-flex items-center justify-center space-x-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              disabled={isTesting}
+              className="inline-flex items-center justify-center space-x-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
             >
               <SafeIcon icon={FiPhone} className="w-5 h-5" />
-              <span>Send Test Webhook</span>
+              <span>{isTesting ? 'Testing...' : 'Send Test Webhook'}</span>
             </button>
 
             <button

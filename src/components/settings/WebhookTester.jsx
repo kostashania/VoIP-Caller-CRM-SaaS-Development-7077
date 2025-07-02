@@ -9,7 +9,6 @@ import toast from 'react-hot-toast';
 const { FiPhone, FiPlay, FiStop, FiRefreshCw, FiDownload, FiTrash2, FiClock, FiCheckCircle, FiXCircle, FiGlobe, FiInfo, FiWifi, FiCopy, FiSend, FiTerminal, FiExternalLink, FiAlertTriangle } = FiIcons;
 
 function WebhookTester() {
-  const [isListening, setIsListening] = useState(false);
   const [webhookLogs, setWebhookLogs] = useState([]);
   const [isTesting, setIsTesting] = useState(false);
   const [testResults, setTestResults] = useState(null);
@@ -45,12 +44,10 @@ function WebhookTester() {
 
   const getWebhookUrl = () => {
     const companyId = getUserCompanyId();
-    // 🔧 FIXED: Use proper Netlify Functions URL structure
     return `${window.location.origin}/.netlify/functions/webhook-incoming-call?company=${companyId}`;
   };
 
   const getHealthUrl = () => {
-    // 🔧 FIXED: Use proper Netlify Functions URL structure  
     return `${window.location.origin}/.netlify/functions/health`;
   };
 
@@ -79,6 +76,27 @@ function WebhookTester() {
     });
   };
 
+  // Enhanced fetch with better timeout handling
+  const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(id);
+      return response;
+    } catch (error) {
+      clearTimeout(id);
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timed out after ${timeoutMs/1000} seconds`);
+      }
+      throw error;
+    }
+  };
+
   // Test 1: Check Health Endpoint
   const testHealthEndpoint = async () => {
     setIsTesting(true);
@@ -89,19 +107,15 @@ function WebhookTester() {
       console.log('🎯 Testing health URL:', healthUrl);
 
       const startTime = Date.now();
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-      const response = await fetch(healthUrl, {
+      
+      const response = await fetchWithTimeout(healthUrl, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache'
-        },
-        signal: controller.signal
-      });
+        }
+      }, 15000); // 15 second timeout
 
-      clearTimeout(timeoutId);
       const responseTime = Date.now() - startTime;
       const isSuccess = response.ok;
 
@@ -113,15 +127,16 @@ function WebhookTester() {
 
       let responseData = null;
       const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        try {
+      
+      try {
+        if (contentType && contentType.includes('application/json')) {
           responseData = await response.json();
-        } catch (jsonError) {
-          console.warn('Failed to parse JSON response:', jsonError);
+        } else {
           responseData = await response.text();
         }
-      } else {
-        responseData = await response.text();
+      } catch (parseError) {
+        console.warn('Could not parse response:', parseError);
+        responseData = 'Could not parse response';
       }
 
       const result = {
@@ -167,9 +182,9 @@ function WebhookTester() {
         error: error.message
       });
 
-      if (error.name === 'AbortError') {
-        toast.error(`❌ Health check timed out (30s)`, { duration: 4000 });
-      } else if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      if (error.message.includes('timed out')) {
+        toast.error(`❌ Health check timed out`, { duration: 4000 });
+      } else if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
         toast.error(`❌ Network error: Functions not deployed or inaccessible`, { duration: 4000 });
       } else {
         toast.error(`❌ Health check failed: ${error.message}`, { duration: 4000 });
@@ -185,7 +200,6 @@ function WebhookTester() {
     toast.info('📞 Testing webhook endpoint...', { duration: 2000 });
 
     try {
-      const companyId = getUserCompanyId();
       const testData = {
         caller_id: '+306912345678',
         timestamp: new Date().toISOString(),
@@ -199,21 +213,17 @@ function WebhookTester() {
       console.log('📞 Test data:', testData);
 
       const startTime = Date.now();
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-      const response = await fetch(webhookUrl, {
+      const response = await fetchWithTimeout(webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Cache-Control': 'no-cache'
         },
-        body: JSON.stringify(testData),
-        signal: controller.signal
-      });
+        body: JSON.stringify(testData)
+      }, 15000); // 15 second timeout
 
-      clearTimeout(timeoutId);
       const responseTime = Date.now() - startTime;
       const isSuccess = response.ok;
 
@@ -225,15 +235,16 @@ function WebhookTester() {
 
       let responseData = null;
       const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        try {
+      
+      try {
+        if (contentType && contentType.includes('application/json')) {
           responseData = await response.json();
-        } catch (jsonError) {
-          console.warn('Failed to parse JSON response:', jsonError);
+        } else {
           responseData = await response.text();
         }
-      } else {
-        responseData = await response.text();
+      } catch (parseError) {
+        console.warn('Could not parse response:', parseError);
+        responseData = 'Could not parse response';
       }
 
       const result = {
@@ -282,9 +293,9 @@ function WebhookTester() {
         error: error.message
       });
 
-      if (error.name === 'AbortError') {
-        toast.error(`❌ Webhook test timed out (30s)`, { duration: 4000 });
-      } else if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      if (error.message.includes('timed out')) {
+        toast.error(`❌ Webhook test timed out`, { duration: 4000 });
+      } else if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
         toast.error(`❌ Network error: Functions not deployed or inaccessible`, { duration: 4000 });
       } else {
         toast.error(`❌ Webhook test failed: ${error.message}`, { duration: 4000 });
@@ -310,7 +321,6 @@ function WebhookTester() {
     // Test 3: Multiple webhooks
     for (let i = 1; i <= 3; i++) {
       try {
-        const companyId = getUserCompanyId();
         const testData = {
           caller_id: `+155500000${i}`,
           timestamp: new Date().toISOString(),
@@ -319,19 +329,13 @@ function WebhookTester() {
           source: 'batch_test'
         };
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for batch
-
-        const response = await fetch(getWebhookUrl(), {
+        const response = await fetchWithTimeout(getWebhookUrl(), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(testData),
-          signal: controller.signal
-        });
-
-        clearTimeout(timeoutId);
+          body: JSON.stringify(testData)
+        }, 10000); // 10 second timeout for batch
 
         addTestLog({
           type: 'batch',
@@ -551,7 +555,7 @@ function WebhookTester() {
               className="inline-flex items-center justify-center space-x-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
               <SafeIcon icon={FiWifi} className="w-5 h-5" />
-              <span>Test Health</span>
+              <span>{isTesting ? 'Testing...' : 'Test Health'}</span>
             </button>
 
             <button
@@ -560,7 +564,7 @@ function WebhookTester() {
               className="inline-flex items-center justify-center space-x-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
             >
               <SafeIcon icon={FiPhone} className="w-5 h-5" />
-              <span>Test Webhook</span>
+              <span>{isTesting ? 'Testing...' : 'Test Webhook'}</span>
             </button>
 
             <button
@@ -569,7 +573,7 @@ function WebhookTester() {
               className="inline-flex items-center justify-center space-x-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
             >
               <SafeIcon icon={FiPlay} className="w-5 h-5" />
-              <span>Full Test Suite</span>
+              <span>{isTesting ? 'Testing...' : 'Full Test Suite'}</span>
             </button>
 
             <button
